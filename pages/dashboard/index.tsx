@@ -32,6 +32,13 @@ type ModelInfo = {
   costPer1kTokens: number
 }
 
+function formatSGD(n: number): string {
+  if (n >= 1000) return `S$${(n / 1000).toFixed(1)}k`
+  return `S$${n.toFixed(2)}`
+}
+
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
 export default function Dashboard() {
   const [usage, setUsage] = useState<UsageData | null>(null)
   const [vault, setVault] = useState<VaultStats | null>(null)
@@ -54,187 +61,442 @@ export default function Dashboard() {
     return () => { clearInterval(t); clearInterval(refresh) }
   }, [])
 
-  const totalMonthly = usage?.dailyUsage?.reduce((s, d) => s + d.cost, 0) || 0
-  const subsTotal = 55 // Claude Pro S$20 + ChatGPT S$20 + OpenRouter ~S$15
-  const roi =Math.max(0, (totalMonthly * 4) - subsTotal)
+  const totalMonthly = usage?.totalCost || 0
+  const subsTotal = 55
+  const hoursSaved = 8
+  const hourlyRate = 31.50
+  const monthlyValue = hoursSaved * hourlyRate * 4.33
+  const netRoi = monthlyValue - subsTotal
+
+  // Mini bar data
+  const maxToken = Math.max(...(usage?.dailyUsage.map(d => d.tokens) || [1]), 1)
+
+  const modelTag = usage?.model || 'deepseek-v4-flash'
+  const isFree = usage?.totalCost === 0
 
   return (
-    <div style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif', background: '#0a0a0f', color: '#e0e0e0', minHeight: '100vh', padding: '24px 32px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+    <div style={{ padding: '20px 28px', maxWidth: 1280, margin: '0 auto', position: 'relative', zIndex: 1 }}>
+
+      {/* ─── Header ─── */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+        marginBottom: 28, paddingTop: 8
+      }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, color: '#fff' }}>Visual OS</h1>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#888' }}>Claude Operating System · AI Workstation Dashboard</p>
+          <h1 style={{
+            margin: 0, fontSize: 30, fontWeight: 800,
+            letterSpacing: '-0.03em'
+          }}>
+            <span className="title-gradient">Visual OS</span>
+          </h1>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
+            <span className="glow-dot green pulse" /> All systems nominal
+          </p>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 13, color: '#888' }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 2 }}>
             {time.toLocaleDateString('en-SG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
-          <div style={{ fontSize: 24, fontWeight: 600, color: '#fff' }}>
-            {time.toLocaleTimeString('en-SG')}
+          <div className="time-display" style={{ fontSize: 28, fontWeight: 700, background: 'linear-gradient(135deg, #f0f0f4, #818cf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            {time.toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>
       </div>
 
-      {/* Onboarding Wizard */}
-      {showOnboard && (
-        <div style={{ background: 'linear-gradient(135deg, #1a1a2e, #16213e)', borderRadius: 12, padding: 24, marginBottom: 24, border: '1px solid #2a2a4e' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* ─── Onboarding Banner ─── */}
+      <div className={`onboard-banner ${!showOnboard ? 'dismissed' : ''}`}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 24 }}>🚀</span>
             <div>
-              <h2 style={{ margin: 0, fontSize: 18, color: '#fff' }}>🚀 Onboarding Wizard</h2>
-              <p style={{ margin: '8px 0 0', fontSize: 13, color: '#aaa' }}>
-                Auto-detected: OpenRouter API ✓ · Obsidian Vault ✓ · Hermes Agent ✓ · Cron Jobs ✓
-              </p>
-              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#666' }}>
-                All systems connected. Dashboard is live.
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#e0e0f0' }}>Onboarding Complete</h3>
+              <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                <span style={{ color: 'var(--accent-emerald)' }}>●</span> OpenRouter ·{' '}
+                <span style={{ color: 'var(--accent-emerald)' }}>●</span> Obsidian Vault ·{' '}
+                <span style={{ color: 'var(--accent-emerald)' }}>●</span> Hermes Agent ·{' '}
+                <span style={{ color: 'var(--accent-emerald)' }}>●</span> Cron Jobs
               </p>
             </div>
-            <button onClick={() => setShowOnboard(false)}
-              style={{ background: '#2a2a4e', border: 'none', color: '#888', padding: '8px 16px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
-              Dismiss
-            </button>
           </div>
+          <button onClick={() => setShowOnboard(false)}
+            style={{
+              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)',
+              color: 'var(--text-muted)', padding: '6px 14px', borderRadius: 8,
+              cursor: 'pointer', fontSize: 12, transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#fff' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text-muted)' }}>
+            Dismiss ✕
+          </button>
         </div>
-      )}
+      </div>
 
-      {/* Top Row: Model Status + Memory */}
+      {/* ─── Quick Stats Bar ─── */}
+      <div style={{
+        display: 'flex', gap: 10, flexWrap: 'wrap',
+        marginTop: 20, marginBottom: 24
+      }}>
+        <span className="top-stat-chip">
+          🎯 <strong>{modelTag}</strong>
+        </span>
+        <span className="top-stat-chip">
+          💰 <strong>{formatSGD(totalMonthly)}</strong> this month
+        </span>
+        <span className="top-stat-chip">
+          📓 <strong>{vault?.totalNotes || '—'}</strong> notes
+        </span>
+        <span className="top-stat-chip">
+          📈 <strong>{netRoi >= 0 ? '+' : ''}S${netRoi.toFixed(0)}</strong> monthly ROI
+        </span>
+        {vault && vault.brokenLinks > 0 && (
+          <span className="top-stat-chip" style={{ borderColor: 'rgba(245,158,11,0.2)', color: 'var(--accent-amber)' }}>
+            ⚠️ <strong>{vault.brokenLinks}</strong> broken links
+          </span>
+        )}
+      </div>
+
+      {/* ─── TOP ROW: Model Status + Memory ─── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
-        {/* Model Status Card */}
-        <DashboardCard title="🎯 Model Status" icon="◎">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <StatBox label="Active Model" value={usage?.model || 'deepseek-v4-flash'} small />
-            <StatBox label="Monthly Spend" value={`S$${(totalMonthly).toFixed(2)}`} />
-            <StatBox label="Credits Left" value={usage ? `S$${(usage.creditsRemaining || 0).toFixed(2)}` : '—'} />
-            <StatBox label="Subscriptions" value={`S$${subsTotal}/mo`} small />
+
+        {/* Model Status */}
+        <div className="glass-card dashboard-card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+            <span style={{ fontSize: 22 }}>🎯</span>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Model Status</h3>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>Token usage & cost overview</p>
+            </div>
           </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="stat-tile">
+              <div className="label">Active Model</div>
+              <div className="value small">{modelTag}</div>
+              <div style={{ fontSize: 10, color: isFree ? 'var(--accent-emerald)' : 'var(--accent-cyan)', marginTop: 2 }}>
+                {isFree ? '🆓 Free tier' : '💰 Paid model'}
+              </div>
+            </div>
+            <div className="stat-tile">
+              <div className="label">Monthly Spend</div>
+              <div className={`value ${totalMonthly === 0 ? 'green' : 'amber'}`}>{formatSGD(totalMonthly)}</div>
+            </div>
+            <div className="stat-tile">
+              <div className="label">Credits Left</div>
+              <div className="value small cyan">{usage ? `S$${(usage.creditsRemaining || 0).toFixed(2)}` : '—'}</div>
+            </div>
+            <div className="stat-tile">
+              <div className="label">Subscriptions</div>
+              <div className="value small">S${subsTotal}/mo</div>
+            </div>
+          </div>
+
+          {/* Mini bar chart - token usage */}
+          {usage?.dailyUsage && usage.dailyUsage.length > 0 && (
+            <div style={{ marginTop: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>7-Day Token Activity</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                  max: {(maxToken / 1000).toFixed(0)}k tokens
+                </span>
+              </div>
+              <div className="mini-bar-wrap">
+                {usage.dailyUsage.map((d, i) => {
+                  const h = Math.max(4, (d.tokens / maxToken) * 38)
+                  const isToday = i === usage.dailyUsage.length - 1
+                  const color = isToday
+                    ? 'var(--accent-indigo)'
+                    : d.tokens > maxToken * 0.7
+                      ? 'var(--accent-cyan)'
+                      : d.tokens > maxToken * 0.3
+                        ? 'var(--accent-indigo)'
+                        : 'rgba(99,102,241,0.3)'
+                  return (
+                    <div key={i} className="mini-bar"
+                      title={`${d.date}: ${(d.tokens / 1000).toFixed(0)}k tokens`}
+                      style={{ height: h, background: color, opacity: isToday ? 1 : 0.7 }} />
+                  )
+                })}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-muted)', marginTop: 4 }}>
+                {usage.dailyUsage.map((d, i) => (
+                  <span key={i} style={{ opacity: i % 2 === 0 ? 1 : 0.4 }}>{d.date}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recharts area chart */}
           {usage?.dailyUsage && usage.dailyUsage.length > 1 && (
-            <div style={{ marginTop: 16, height: 120 }}>
-              <p style={{ fontSize: 11, color: '#666', marginBottom: 8 }}>Daily Token Usage (7-day)</p>
+            <div style={{ marginTop: 16, height: 110 }}>
               <ResponsiveContainer width="100%" height={100}>
                 <AreaChart data={usage.dailyUsage}>
                   <defs>
                     <linearGradient id="colorTokens" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25}/>
                       <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1a1a2e" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#666' }} />
-                  <YAxis tick={{ fontSize: 10, fill: '#666' }} />
-                  <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #2a2a4e', borderRadius: 8, fontSize: 12 }} />
-                  <Area type="monotone" dataKey="tokens" stroke="#6366f1" fillOpacity={1} fill="url(#colorTokens)" strokeWidth={2} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#555577' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 9, fill: '#555577' }} axisLine={false} tickLine={false} width={30} />
+                  <Tooltip
+                    contentStyle={{
+                      background: 'rgba(13,13,22,0.95)', border: '1px solid rgba(99,102,241,0.2)',
+                      borderRadius: 8, fontSize: 11, backdropFilter: 'blur(8px)'
+                    }}
+                    itemStyle={{ color: '#e0e0f0' }}
+                    labelStyle={{ color: '#8888aa' }}
+                  />
+                  <Area
+                    type="monotone" dataKey="tokens"
+                    stroke="#6366f1" fillOpacity={1} fill="url(#colorTokens)"
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, fill: '#818cf8', stroke: '#6366f1', strokeWidth: 2 }}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           )}
-        </DashboardCard>
+        </div>
 
-        {/* Memory Card */}
-        <DashboardCard title="🧠 Memory Map" icon="📚">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <StatBox label="Vault Notes" value={String(vault?.totalNotes || '—')} />
-            <StatBox label="Total Links" value={String(vault?.totalLinks || '—')} />
-            <StatBox label="Vault Size" value={vault?.vaultSize || '—'} />
+        {/* Memory Map */}
+        <div className="glass-card cyan dashboard-card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+            <span style={{ fontSize: 22 }}>🧠</span>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Memory Map</h3>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>Obsidian vault graph</p>
+            </div>
           </div>
-          <ForceGraph data={graphData} />
-          {vault && (
-            <div style={{ marginTop: 8, fontSize: 11, color: vault.brokenLinks > 0 ? '#f59e0b' : '#22c55e', textAlign: 'center' }}>
-              {vault.brokenLinks > 0 ? `⚠ ${vault.brokenLinks} broken link(s) detected` : '✅ All links healthy'}
-            </div>
-          )}
-        </DashboardCard>
-      </div>
 
-      {/* Bottom Row: Dreaming + ROI */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-        {/* Dreaming Card */}
-        <DashboardCard title="💭 Dreaming Engine" icon="✨" subtitle="Daily self-improvement recommendations">
-          {dreaming.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {dreaming.slice(0, 4).map((rec, i) => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 10,
-                  padding: '12px 14px', borderRadius: 8,
-                  background: rec.priority === 'high' ? 'rgba(239,68,68,0.1)' : rec.priority === 'medium' ? 'rgba(245,158,11,0.1)' : 'rgba(34,197,94,0.1)',
-                  border: `1px solid ${
-                    rec.priority === 'high' ? 'rgba(239,68,68,0.3)' : rec.priority === 'medium' ? 'rgba(245,158,11,0.3)' : 'rgba(34,197,94,0.3)'
-                  }`
-                }}>
-                  <span style={{ fontSize: 18, flexShrink: 0 }}>
-                    {rec.type === 'cost_save' ? '💰' : rec.type === 'vault' ? '📝' : rec.type === 'task_gap' ? '⚡' : rec.type === 'skill' ? '🔧' : '💡'}
-                  </span>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#ccc', marginBottom: 2 }}>
-                      {rec.type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#aaa', lineHeight: 1.4 }}>{rec.message}</div>
-                  </div>
-                </div>
-              ))}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+            <div className="stat-tile">
+              <div className="label">Vault Notes</div>
+              <div className={`value small ${vault?.totalNotes ? 'indigo' : ''}`}>{vault?.totalNotes || '—'}</div>
             </div>
+            <div className="stat-tile">
+              <div className="label">Total Links</div>
+              <div className={`value small ${vault?.totalLinks ? 'cyan' : ''}`}>{vault?.totalLinks || '—'}</div>
+            </div>
+            <div className="stat-tile">
+              <div className="label">Vault Size</div>
+              <div className="value small">{vault?.vaultSize || '—'}</div>
+            </div>
+          </div>
+
+          {graphData.nodes.length > 0 && graphData.nodes.length <= 200 ? (
+            <ForceGraph data={graphData} />
           ) : (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: '#555' }}>
-              <div style={{ fontSize: 36, marginBottom: 8 }}>🌙</div>
-              <p style={{ fontSize: 13, margin: 0 }}>Dreaming engine hasn't run yet.</p>
-              <p style={{ fontSize: 12, margin: '4px 0 0', color: '#444' }}>It fires daily at 6:00 AM SGT. Next run: tomorrow.</p>
+            <div className="empty-state">
+              <div className="icon">🗄️</div>
+              <div className="text">
+                {graphData.nodes.length > 200
+                  ? `${graphData.nodes.length} nodes — too many to graph`
+                  : 'No vault data to graph'}
+              </div>
+              <div className="sub">Sync Obsidian to populate the graph</div>
             </div>
           )}
-        </DashboardCard>
 
-        {/* ROI Card */}
-        <DashboardCard title="📊 ROI Tracker" icon="📈">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <StatBox label="Time Saved (est.)" value="~8h/week" />
-            <StatBox label="Hourly Rate" value="S$31.50" />
-            <StatBox label="Monthly Value" value={`S$${(8 * 31.50 * 4.33).toFixed(0)}`} />
-            <StatBox label="Subscriptions" value={`-S$${subsTotal}`} />
-          </div>
-          <div style={{
-            marginTop: 16, padding: '16px 20px', borderRadius: 8,
-            background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(34,197,94,0.15))',
-            border: '1px solid rgba(99,102,241,0.3)',
-            textAlign: 'center'
-          }}>
-            <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>Net Monthly ROI</div>
-            <div style={{ fontSize: 32, fontWeight: 700, color: '#22c55e' }}>
-              +S${((8 * 31.50 * 4.33) - subsTotal).toFixed(0)}
+          {vault && (
+            <div style={{
+              marginTop: 12, fontSize: 11,
+              color: vault.brokenLinks > 0 ? 'var(--accent-amber)' : 'var(--accent-emerald)',
+              textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
+            }}>
+              <span className={`glow-dot ${vault.brokenLinks > 0 ? 'amber' : 'green'}`}
+                style={vault.brokenLinks === 0 ? { animation: 'pulse-glow 3s ease-in-out infinite' } : {}} />
+              {vault.brokenLinks > 0
+                ? `⚠ ${vault.brokenLinks} broken link(s) — review needed`
+                : 'All links healthy'}
             </div>
-            <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
-              Based on ~8h/week saved at S$31.50/h (MOE rate)
+          )}
+
+          {/* Recently modified */}
+          {vault && vault.recentlyModified.length > 0 && (
+            <div style={{ marginTop: 14, padding: '10px 0 0', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                📝 Recently Modified
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {vault.recentlyModified.slice(0, 5).map((f, i) => (
+                  <span key={i} style={{
+                    fontSize: 10, padding: '3px 8px',
+                    background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.1)',
+                    borderRadius: 4, color: 'var(--text-secondary)'
+                  }}>
+                    {f.replace('.md', '')}
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
-        </DashboardCard>
-      </div>
-
-      {/* Footer */}
-      <div style={{ marginTop: 40, padding: '16px 0', borderTop: '1px solid #1a1a2e', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#444' }}>
-        <span>Visual OS v0.1 · Running on Hermes Agent</span>
-        <span>Amos Khan · Singapore SGT (GMT+8)</span>
-      </div>
-    </div>
-  )
-}
-
-function DashboardCard({ title, icon, subtitle, children }: { title: string; icon: string; subtitle?: string; children: React.ReactNode }) {
-  return (
-    <div style={{ background: '#0d0d14', borderRadius: 12, padding: 20, border: '1px solid #1a1a2e' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-        <span style={{ fontSize: 20 }}>{icon}</span>
-        <div>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#fff' }}>{title}</h3>
-          {subtitle && <p style={{ margin: '2px 0 0', fontSize: 11, color: '#555' }}>{subtitle}</p>}
+          )}
         </div>
       </div>
-      {children}
-    </div>
-  )
-}
 
-function StatBox({ label, value, small }: { label: string; value: string; small?: boolean }) {
-  return (
-    <div style={{ background: '#0a0a12', borderRadius: 8, padding: '12px 14px', border: '1px solid #14141e' }}>
-      <div style={{ fontSize: 10, color: '#666', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
-      <div style={{ fontSize: small ? 13 : 18, fontWeight: 600, color: '#fff' }}>{value}</div>
+      {/* ─── BOTTOM ROW: Dreaming + ROI ─── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+
+        {/* Dreaming Engine */}
+        <div className="glass-card amber dashboard-card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+            <span style={{ fontSize: 22 }}>💭</span>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Dreaming Engine</h3>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+                Daily self-improvement recommendations
+              </p>
+            </div>
+          </div>
+
+          {dreaming.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {dreaming.slice(0, 4).map((rec, i) => {
+                const iconMap: Record<string, string> = {
+                  skill: '🔧', cost_save: '💰', vault: '📝',
+                  task_gap: '⚡', insight: '💡'
+                }
+                const clsMap: Record<string, string> = {
+                  skill: 'skill', cost_save: 'medium', vault: 'low',
+                  task_gap: 'high', insight: 'medium'
+                }
+                const cls = clsMap[rec.type] || rec.priority
+                return (
+                  <div key={i} className={`dream-item ${cls}`}>
+                    <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>
+                      {iconMap[rec.type] || '💡'}
+                    </span>
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 2, textTransform: 'capitalize' }}>
+                        {rec.type.replace(/_/g, ' ')}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#bbb', lineHeight: 1.5 }}>{rec.message}</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <div className="icon">🌙</div>
+              <div className="text">Dreaming engine hasn't run yet</div>
+              <div className="sub">Fires daily at 6:00 AM SGT · Next run: tomorrow</div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 14, fontSize: 10, color: 'var(--text-muted)', textAlign: 'right' }}>
+            Powered by Hermes Agent · {dreaming.length} suggestions
+          </div>
+        </div>
+
+        {/* ROI Tracker */}
+        <div className="glass-card emerald dashboard-card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+            <span style={{ fontSize: 22 }}>📊</span>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>ROI Tracker</h3>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+                Time & value saved with AI workflows
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="stat-tile">
+              <div className="label">Time Saved (est.)</div>
+              <div className="value small" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                ~{hoursSaved}h/week
+                <span style={{ fontSize: 10, color: 'var(--accent-emerald)', fontWeight: 400 }}>+20% vs last month</span>
+              </div>
+            </div>
+            <div className="stat-tile">
+              <div className="label">Hourly Rate</div>
+              <div className="value small">S${hourlyRate}</div>
+            </div>
+            <div className="stat-tile">
+              <div className="label">Monthly Value</div>
+              <div className="value green">S${monthlyValue.toFixed(0)}</div>
+            </div>
+            <div className="stat-tile">
+              <div className="label">Subscriptions</div>
+              <div className="value small rose">-S${subsTotal}</div>
+            </div>
+          </div>
+
+          <div className="roi-glow" style={{ marginTop: 18 }}>
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Net Monthly ROI</div>
+              <div style={{
+                fontSize: 34, fontWeight: 800,
+                color: netRoi >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)',
+                fontFamily: "'JetBrains Mono', monospace",
+                letterSpacing: '-0.03em'
+              }}>
+                {netRoi >= 0 ? '+' : ''}S${netRoi.toFixed(0)}
+              </div>
+              <div style={{
+                width: '100%', height: 4, marginTop: 10,
+                background: 'rgba(255,255,255,0.04)', borderRadius: 2,
+                position: 'relative', overflow: 'hidden'
+              }}>
+                <div style={{
+                  width: `${Math.min(100, (netRoi / 1500) * 100)}%`, height: '100%',
+                  background: 'linear-gradient(90deg, var(--accent-indigo), var(--accent-emerald))',
+                  borderRadius: 2, transition: 'width 1s ease'
+                }} />
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8 }}>
+                Based on ~{hoursSaved}h/week saved at S${hourlyRate}/h (MOE GEO2 rate)
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Models Quick Reference ─── */}
+      {models.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <div className="glass-card" style={{ padding: '16px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 14 }}>🤖</span>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Available Models</span>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                {models.filter(m => m.costPer1kTokens === 0).length} free · {models.filter(m => m.costPer1kTokens > 0).length} paid
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {models.map((m, i) => {
+                const isActive = m.id === modelTag
+                const isFreeTier = m.costPer1kTokens === 0
+                return (
+                  <span key={i} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '5px 10px', borderRadius: 6, fontSize: 11,
+                    background: isActive ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.02)',
+                    border: `1px solid ${isActive ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.04)'}`,
+                    color: isActive ? 'var(--accent-indigo)' : 'var(--text-secondary)',
+                    fontWeight: isActive ? 600 : 400,
+                    transition: 'all 0.2s'
+                  }}>
+                    {isActive && '▶ '}
+                    {m.name}
+                    {isFreeTier && <span style={{ fontSize: 9, color: 'var(--accent-emerald)' }}>FREE</span>}
+                    {isActive && <span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 2 }}>(active)</span>}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Footer ─── */}
+      <div className="footer">
+        <span>Visual OS · Running on Hermes Agent</span>
+        <span>Amos Khan · Singapore SGT (GMT+8)</span>
+        <span>{time.toLocaleDateString('en-SG')}</span>
+      </div>
     </div>
   )
 }

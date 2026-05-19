@@ -31,16 +31,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const dailyUsage: { date: string; cost: number; tokens: number }[] = []
     const today = now.getDay() // 0=Sun
     
+    // Distribute weekly usage evenly across weekdays (fixed, no random)
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now)
       d.setDate(d.getDate() - i)
       const isWeekday = d.getDay() >= 1 && d.getDay() <= 5
-      // Distribute weekly usage across weekdays with slight variance
-      const share = isWeekday ? (usageWeekly / 5) * (0.7 + Math.random() * 0.6) : usageWeekly * 0.1
+      const share = isWeekday ? usageWeekly / 5 : 0
       dailyUsage.push({
         date: d.toLocaleDateString('en-SG', { weekday: 'short' }),
         cost: Number(share.toFixed(4)),
-        tokens: Math.round(share * 50000) // rough estimate: ~50K tokens per dollar
+        tokens: Math.round(share * 50000)
       })
     }
 
