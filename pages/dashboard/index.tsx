@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
+import ForceGraph from '../../components/ForceGraph'
 
 type UsageData = {
   totalCost: number
@@ -36,6 +37,7 @@ export default function Dashboard() {
   const [vault, setVault] = useState<VaultStats | null>(null)
   const [dreaming, setDreaming] = useState<DreamingRec[]>([])
   const [models, setModels] = useState<ModelInfo[]>([])
+  const [graphData, setGraphData] = useState<any>({ nodes: [], links: [] })
   const [time, setTime] = useState(new Date())
   const [showOnboard, setShowOnboard] = useState(true)
 
@@ -44,6 +46,7 @@ export default function Dashboard() {
     fetch('/api/vault-stats').then(r => r.json()).then(setVault).catch(() => {})
     fetch('/api/dreaming').then(r => r.json()).then(setDreaming).catch(() => {})
     fetch('/api/models').then(r => r.json()).then(setModels).catch(() => {})
+    fetch('/api/vault-graph').then(r => r.json()).then(setGraphData).catch(() => {})
     const t = setInterval(() => setTime(new Date()), 1000)
     const refresh = setInterval(() => {
       fetch('/api/usage').then(r => r.json()).then(setUsage).catch(() => {})
@@ -128,26 +131,14 @@ export default function Dashboard() {
 
         {/* Memory Card */}
         <DashboardCard title="🧠 Memory Map" icon="📚">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
             <StatBox label="Vault Notes" value={String(vault?.totalNotes || '—')} />
             <StatBox label="Total Links" value={String(vault?.totalLinks || '—')} />
             <StatBox label="Vault Size" value={vault?.vaultSize || '—'} />
           </div>
-          <div style={{ marginTop: 16 }}>
-            <p style={{ fontSize: 11, color: '#666', marginBottom: 6 }}>Recently Modified</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {(vault?.recentlyModified || []).slice(0, 5).map((f, i) => (
-                <span key={i} style={{ background: '#1a1a2e', padding: '4px 10px', borderRadius: 4, fontSize: 11, color: '#aaa' }}>
-                  {f.replace('.md', '')}
-                </span>
-              ))}
-              {(!vault?.recentlyModified || vault.recentlyModified.length === 0) && (
-                <span style={{ fontSize: 12, color: '#666' }}>No recent edits</span>
-              )}
-            </div>
-          </div>
+          <ForceGraph data={graphData} />
           {vault && (
-            <div style={{ marginTop: 12, fontSize: 11, color: vault.brokenLinks > 0 ? '#f59e0b' : '#22c55e' }}>
+            <div style={{ marginTop: 8, fontSize: 11, color: vault.brokenLinks > 0 ? '#f59e0b' : '#22c55e', textAlign: 'center' }}>
               {vault.brokenLinks > 0 ? `⚠ ${vault.brokenLinks} broken link(s) detected` : '✅ All links healthy'}
             </div>
           )}
