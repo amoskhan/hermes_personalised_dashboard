@@ -55,6 +55,7 @@ export default function Dashboard() {
   const [models, setModels] = useState<ModelInfo[]>([])
   const [calendar, setCalendar] = useState<{ date: string; events: CalendarEvent[] } | null>(null)
   const [personas, setPersonas] = useState<{ personas: {id:string,name:string,description:string,emoji:string}[], active: string } | null>(null)
+  const [github, setGithub] = useState<{ repos: any[], total_commits: number } | null>(null)
   const [graphData, setGraphData] = useState<any>({ nodes: [], links: [] })
   const [time, setTime] = useState(new Date())
   const [showOnboard, setShowOnboard] = useState(true)
@@ -66,6 +67,7 @@ export default function Dashboard() {
     fetch('/api/models').then(r => r.json()).then(setModels).catch(() => {})
     fetch('/api/calendar').then(r => r.json()).then(setCalendar).catch(() => {})
     fetch('/api/personas').then(r => r.json()).then(setPersonas).catch(() => {})
+    fetch('/api/github').then(r => r.json()).then(setGithub).catch(() => {})
     fetch('/api/vault-graph').then(r => r.json()).then(setGraphData).catch(() => {})
     const t = setInterval(() => setTime(new Date()), 1000)
     const refresh = setInterval(() => {
@@ -560,6 +562,75 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* ─── GitHub Activity ─── */}
+      {github && github.repos.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <div className="glass-card dashboard-card">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <span style={{ fontSize: 22 }}>🐙</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>GitHub Activity</h3>
+                <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+                  Recent commits across {github.repos.length} repos · {github.total_commits} commits
+                </p>
+              </div>
+              <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)' }}>
+                <a href="https://github.com/amoskhan" target="_blank" rel="noopener" style={{ color: 'var(--accent-indigo)', textDecoration: 'none' }}>
+                  github.com/amoskhan ↗
+                </a>
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {github.repos.slice(0, 4).map((repo, ri) => (
+                <div key={ri}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                      color: 'var(--accent-indigo)', letterSpacing: '0.05em'
+                    }}>
+                      📁 {repo.name}
+                    </span>
+                    {repo.pushed_at && (
+                      <span style={{ fontSize: 9, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                        pushed {repo.pushed_at}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {repo.commits.map((c: any, ci: number) => (
+                      <div key={ci} style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '5px 8px', borderRadius: 6,
+                        background: 'rgba(255,255,255,0.01)',
+                        fontSize: 11
+                      }}>
+                        <code style={{
+                          fontSize: 9, color: '#555', fontFamily: "'JetBrains Mono', monospace",
+                          background: 'rgba(99,102,241,0.06)', padding: '1px 4px', borderRadius: 3,
+                          flexShrink: 0
+                        }}>
+                          {c.sha}
+                        </code>
+                        <span style={{ flex: 1, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {c.message}
+                        </span>
+                        <span style={{ fontSize: 9, color: 'var(--text-muted)', flexShrink: 0 }}>
+                          {c.date}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {ri < github.repos.length - 1 && (
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.03)', marginTop: 12 }} />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Persona Switcher ─── */}
       {personas && personas.personas.length > 0 && (
