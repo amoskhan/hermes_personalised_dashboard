@@ -1,31 +1,27 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import * as d3 from 'd3'
 
-interface GraphNode {
-  id: string
-  group: number
-  size: number
-}
+interface GraphNode { id: string; group: number; size: number }
+interface GraphLink { source: string; target: string; count: number }
+interface GraphData { nodes: GraphNode[]; links: GraphLink[] }
 
-interface GraphLink {
-  source: string
-  target: string
-  count: number
-}
-
-interface GraphData {
-  nodes: GraphNode[]
-  links: GraphLink[]
-}
+const COLORS = [
+  '#6366f1', '#22c55e', '#06b6d4', '#f59e0b',
+  '#ef4444', '#ec4899', '#8b5cf6', '#14b8a6',
+  '#f97316', '#a855f7',
+]
 
 export default function ForceGraph({ data }: { data: GraphData }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [search, setSearch] = useState('')
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null)
-  const [dimensions, setDimensions] = useState({ w: 600, h: 340 })
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string; links?: string } | null>(null)
+  const [dimensions, setDimensions] = useState({ w: 600, h: 400 })
+  const [minConnections, setMinConnections] = useState(0)
+  const [focusedNode, setFocusedNode] = useState<string | null>(null)
+  const [showNodeList, setShowNodeList] = useState(true)
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null)
 
-  // Compute connection counts for sizing
   const connectionCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     for (const link of data.links) {
@@ -35,127 +31,225 @@ export default function ForceGraph({ data }: { data: GraphData }) {
     return counts
   }, [data])
 
-  // Track resize
+  const maxConns = useMemo(
+    () => Math.max(...data.nodes.map(n => connectionCounts[n.id] || 1), 1),
+    [data, connectionCounts]
+  )
+
+  // Focus set: focused node + all nodes it connects to
+  const focusSet = useMemo(() => {
+    if (!focusedNode) return null
+    const connected = new Set<string>([focusedNode])
+    for (const link of data.links) {
+      if (link.source === focusedNode) connected.add(link.target as string)
+      if (link.target === focusedNode) connected.add(link.source as string)
+    }
+    return connected
+  }, [focusedNode, data])
+
+  // Filtered nodes + links based on minConnections
+  const { filteredNodes, filteredLinks } = useMemo(() => {
+    if (minConnections === 0) {
+      return { filteredNodes: data.nodes, filteredLinks: data.links }
+    }
+    const keep = new Set(
+      data.nodes
+        .filter(n => (connectionCounts[n.id] || 0) >= minConnections)
+        .map(n => n.id)
+    )
+    // Also keep nodes connected to those above threshold
+    for (const link of data.links) {
+      if (keep.has(link.source as string) || keep.has(link.target as string)) {
+        keep.add(link.source as string)
+        keep.add(link.target as string)
+      }
+    }
+    return {
+      filteredNodes: data.nodes.filter(n => keep.has(n.id)),
+      filteredLinks: data.links.filter(
+        l => keep.has(l.source as string) && keep.has(l.target as string)
+      ),
+    }
+  }, [data, minConnections, connectionCounts])
+
+  const sortedNodes = useMemo(() => {
+    return [...filteredNodes]
+      .filter(n => n.group === 1)
+      .sort((a, b) => (connectionCounts[b.id] || 0) - (connectionCounts[a.id] || 0))
+  }, [filteredNodes, connectionCounts])
+
+  // Resize
   useEffect(() => {
     const obs = new ResizeObserver(entries => {
       for (const e of entries) {
         const w = e.contentRect.width
-        if (w > 0) setDimensions(prev => prev.w !== w ? { w, h: Math.min(400, Math.max(280, w * 0.55)) } : prev)
+        if (w > 0) setDimensions(prev => prev.w !== w ? { w, h: Math.min(420, Math.max(300, w * 0.5)) } : prev)
       }
     })
     if (containerRef.current) obs.observe(containerRef.current)
     return () => obs.disconnect()
   }, [])
 
+  const shortId = (id: string) => {
+    const s = id.replace(/\.md$/, '').replace(/^.*[/\\]/, '')
+    return s.length > 24 ? s.slice(0, 21) + '…' : s
+  }
+
+  const nodeColor = (id: string, group: number) => {
+    if (group === 2) return '#444466'
+    let hash = 0
+    for (let i = 0; i < id.length; i++) hash = ((hash << 5) - hash) + id.charCodeAt(i)
+    return COLORS[Math.abs(hash) % COLORS.length]
+  }
+
   // Main D3 render
   useEffect(() => {
-    if (!svgRef.current || !data.nodes.length) return
+    if (!svgRef.current || !filteredNodes.length) return
 
     const { w, h } = dimensions
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
 
-    // Clean IDs for display
-    const shortId = (id: string) => {
-      const s = id.replace(/\.md$/, '').replace(/^.*[/\\]/, '')
-      return s.length > 20 ? s.slice(0, 17) + '…' : s
-    }
-
-    // Zoom behavior
     const g = svg.append('g')
     const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.15, 4])
-      .on('zoom', (event) => {
-        g.attr('transform', event.transform)
-      })
+      .scaleExtent([0.15, 5])
+      .on('zoom', (event) => { g.attr('transform', event.transform) })
     svg.call(zoom)
-    // Center initially
     svg.call(zoom.transform, d3.zoomIdentity.translate(w / 2, h / 2).scale(0.7))
 
-    const color = (g: number, id: string) => {
-      if (g === 1) {
-        const deg = (id.length * 37) % 360
-        return `oklch(65% 0.15 ${deg})`
-      }
-      return '#444466'
+    const radius = (id: string) => {
+      const c = connectionCounts[id] || 1
+      return Math.max(4, Math.min(14, (c / maxConns) * 10 + 3))
     }
 
-    // Compute node radii by connection count
-    const maxConns = Math.max(...data.nodes.map(n => connectionCounts[n.id] || 1), 1)
-    const radius = (id: string) => Math.max(3, Math.min(12, ((connectionCounts[id] || 1) / maxConns) * 10 + 2))
-
-    // Search highlighting
     const searchLower = search.toLowerCase()
     const isHighlighted = (id: string) => searchLower && id.toLowerCase().includes(searchLower)
 
-    const simulation = d3.forceSimulation(data.nodes as any)
-      .force('link', d3.forceLink<any, any>(data.links).id((d: any) => d.id).distance((d: any) => 50 + (d.count || 1) * 10))
-      .force('charge', d3.forceManyBody().strength(-120))
+    // Check if a node should be dimmed (focused mode)
+    const isDimmed = (id: string) => {
+      if (!focusedNode) return false
+      return !focusSet?.has(id)
+    }
+
+    const simulation = d3.forceSimulation(filteredNodes as any)
+      .force('link', d3.forceLink<any, any>(filteredLinks)
+        .id((d: any) => d.id)
+        .distance(d => 40 + (d.count || 1) * 15))
+      .force('charge', d3.forceManyBody().strength(-100))
       .force('center', d3.forceCenter(0, 0))
-      .force('collision', d3.forceCollide().radius((d: any) => radius(d.id) + 4))
+      .force('collision', d3.forceCollide().radius(d => radius((d as any).id) + 5))
       .alphaDecay(0.02)
 
     // Links
     const link = g.append('g')
       .selectAll('line')
-      .data(data.links)
+      .data(filteredLinks)
       .join('line')
       .attr('stroke', '#2a2a5e')
       .attr('stroke-width', d => Math.min(d.count, 3))
-      .attr('stroke-opacity', d => 0.2 + d.count * 0.08)
+      .attr('stroke-opacity', d => 0.15 + d.count * 0.08)
+      .attr('opacity', d => {
+        if (!focusedNode) return 1
+        return (focusedNode === d.source || focusedNode === d.target) ? 1 : 0.1
+      })
 
     // Nodes
     const node = g.append('g')
       .selectAll('circle')
-      .data(data.nodes)
+      .data(filteredNodes)
       .join('circle')
       .attr('r', d => radius(d.id))
-      .attr('fill', d => color(d.group, d.id))
-      .attr('stroke', d => isHighlighted(d.id) ? '#fff' : d.group === 1 ? '#1a1a3e' : 'none')
-      .attr('stroke-width', d => isHighlighted(d.id) ? 2 : 1)
-      .attr('cursor', 'grab')
-      .style('filter', d => isHighlighted(d.id) ? 'drop-shadow(0 0 6px rgba(255,255,255,0.3))' : 'none')
+      .attr('fill', d => nodeColor(d.id, d.group))
+      .attr('stroke', d => {
+        if (isHighlighted(d.id)) return '#fff'
+        if (d.id === focusedNode) return '#818cf8'
+        if (focusedNode && !isDimmed(d.id)) return '#6366f1'
+        return d.group === 1 ? '#1a1a3e' : 'none'
+      })
+      .attr('stroke-width', d => {
+        if (isHighlighted(d.id)) return 2.5
+        if (d.id === focusedNode) return 2.5
+        if (focusedNode && !isDimmed(d.id)) return 2
+        return focusedNode ? 0.2 : 1
+      })
+      .attr('opacity', d => isDimmed(d.id) ? 0.15 : (isHighlighted(d.id) ? 1 : 0.85))
+      .attr('cursor', 'pointer')
+      .style('filter', d => {
+        if (isHighlighted(d.id)) return 'drop-shadow(0 0 6px rgba(255,255,255,0.3))'
+        if (d.id === focusedNode) return 'drop-shadow(0 0 8px rgba(99,102,241,0.5))'
+        return 'none'
+      })
       .call(d3.drag<any, any>()
         .on('start', (event, d) => {
           if (!event.active) simulation.alphaTarget(0.3).restart()
-          d.fx = d.x
-          d.fy = d.y
+          d.fx = d.x; d.fy = d.y
         })
-        .on('drag', (event, d) => {
-          d.fx = event.x
-          d.fy = event.y
-        })
+        .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y })
         .on('end', (event, d) => {
           if (!event.active) simulation.alphaTarget(0)
-          d.fx = null
-          d.fy = null
+          d.fx = null; d.fy = null
         })
       )
       .on('mouseenter', (event: MouseEvent, d: any) => {
+        setHoveredNode(d.id)
         const rect = svgRef.current!.getBoundingClientRect()
+        const x = event.clientX - rect.left + 12
+        const y = event.clientY - rect.top - 8
+        const conns = connectionCounts[d.id] || 0
+        const connectedNames = filteredLinks
+          .filter(l => l.source === d.id || l.target === d.id)
+          .map(l => shortId(l.source === d.id ? l.target : l.source))
+          .slice(0, 8)
         setTooltip({
-          x: event.clientX - rect.left + 12,
-          y: event.clientY - rect.top - 8,
-          text: `${d.id}${connectionCounts[d.id] ? ` · ${connectionCounts[d.id]} connections` : ''}`
+          x: Math.min(x, rect.width - 250),
+          y,
+          text: `${shortId(d.id)} · ${conns} connection${conns !== 1 ? 's' : ''}`,
+          links: connectedNames.length ? connectedNames.join(', ') : undefined,
         })
       })
-      .on('mouseleave', () => setTooltip(null))
+      .on('mouseleave', () => { setHoveredNode(null); setTooltip(null) })
+      .on('click', (event: MouseEvent, d: any) => {
+        event.stopPropagation()
+        if (d.id === focusedNode) {
+          setFocusedNode(null)
+          svg.transition().duration(500).call(
+            zoom.transform,
+            d3.zoomIdentity.translate(w / 2, h / 2).scale(0.7)
+          )
+        } else {
+          setFocusedNode(d.id)
+          svg.transition().duration(600).call(
+            zoom.transform,
+            d3.zoomIdentity.translate(w / 2 - d.x * 1.3, h / 2 - d.y * 1.3).scale(1.3)
+          )
+        }
+      })
 
-    // Labels
+    // Labels — only for hovered + focused nodes
     const label = g.append('g')
       .selectAll('text')
-      .data(data.nodes.filter(n => n.group === 1))
+      .data(filteredNodes.filter(n => n.group === 1))
       .join('text')
       .text(d => shortId(d.id))
-      .attr('font-size', d => isHighlighted(d.id) ? 11 : 9)
-      .attr('fill', d => isHighlighted(d.id) ? '#fff' : '#8888aa')
-      .attr('font-weight', d => isHighlighted(d.id) ? 600 : 400)
-      .attr('dx', d => radius(d.id) + 4)
-      .attr('dy', 3)
+      .attr('font-size', d => d.id === focusedNode ? 11 : 10)
+      .attr('fill', d => d.id === focusedNode ? '#f0f0f4' : '#cccce0')
+      .attr('font-weight', d => d.id === focusedNode ? 600 : 500)
+      .attr('dx', d => radius(d.id) + 5)
+      .attr('dy', 4)
       .style('pointer-events', 'none')
-      .style('text-shadow', '0 1px 3px rgba(0,0,0,0.6)')
+      .style('text-shadow', '0 1px 4px rgba(0,0,0,0.8)')
+      .attr('opacity', d => hoveredNode === d.id || d.id === focusedNode ? 1 : 0)
+      .style('transition', 'opacity 0.15s')
 
-    // Simulation tick
+    // Click on background = unfocus
+    svg.on('click', () => {
+      setFocusedNode(null)
+      svg.transition().duration(500).call(
+        zoom.transform,
+        d3.zoomIdentity.translate(w / 2, h / 2).scale(0.7)
+      )
+    })
+
     simulation.on('tick', () => {
       link
         .attr('x1', (d: any) => d.source.x)
@@ -170,9 +264,9 @@ export default function ForceGraph({ data }: { data: GraphData }) {
         .attr('y', (d: any) => d.y)
     })
 
-    // Click to zoom on search match
+    // Search zoom
     if (searchLower) {
-      const match = data.nodes.find(n => n.id.toLowerCase().includes(searchLower))
+      const match = filteredNodes.find(n => n.id.toLowerCase().includes(searchLower))
       if (match) {
         setTimeout(() => {
           svg.transition().duration(750).call(
@@ -184,10 +278,10 @@ export default function ForceGraph({ data }: { data: GraphData }) {
     }
 
     return () => { simulation.stop() }
-  }, [data, search, dimensions])
+  }, [filteredNodes, filteredLinks, search, dimensions, minConnections, focusedNode, focusSet, hoveredNode])
 
-  const existingCount = data.nodes.filter(n => n.group === 1).length
-  const externalCount = data.nodes.filter(n => n.group === 2).length
+  const existingCount = filteredNodes.filter(n => n.group === 1).length
+  const externalCount = filteredNodes.filter(n => n.group === 2).length
 
   if (!data.nodes.length) {
     return (
@@ -201,15 +295,15 @@ export default function ForceGraph({ data }: { data: GraphData }) {
 
   return (
     <div style={{ position: 'relative' }}>
-      {/* Search bar */}
-      <div style={{ marginBottom: 10, display: 'flex', gap: 6 }}>
+      {/* Controls row */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <input
           type="text"
           placeholder="🔍 Search notes..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           style={{
-            flex: 1, padding: '6px 10px', fontSize: 12,
+            flex: 1, minWidth: 120, padding: '6px 10px', fontSize: 12,
             background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)',
             borderRadius: 6, color: '#ccc', outline: 'none',
           }}
@@ -217,54 +311,148 @@ export default function ForceGraph({ data }: { data: GraphData }) {
           onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.06)'}
         />
         {search && (
-          <button
-            onClick={() => setSearch('')}
+          <button onClick={() => setSearch('')}
             style={{
               padding: '4px 10px', fontSize: 12,
               background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)',
               borderRadius: 6, color: '#888', cursor: 'pointer'
+            }}>✕</button>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: '#8888aa' }}>
+          <span>Min links</span>
+          <select value={minConnections} onChange={e => setMinConnections(Number(e.target.value))}
+            style={{
+              padding: '4px 6px', fontSize: 11,
+              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 4, color: '#ccc', outline: 'none',
             }}
-          >✕</button>
+          >
+            <option value={0}>All</option>
+            <option value={1}>≥ 1</option>
+            <option value={2}>≥ 2</option>
+            <option value={3}>≥ 3</option>
+            <option value={4}>≥ 4</option>
+          </select>
+        </div>
+
+        {focusedNode && (
+          <button onClick={() => setFocusedNode(null)}
+            style={{
+              padding: '4px 10px', fontSize: 11,
+              background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.2)',
+              borderRadius: 6, color: '#818cf8', cursor: 'pointer'
+            }}>
+            ✕ Unfocus
+          </button>
         )}
       </div>
 
-      {/* Graph container */}
-      <div ref={containerRef} style={{ width: '100%', borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
-        <svg ref={svgRef} style={{ width: '100%', height: dimensions.h, cursor: 'grab' }} />
-        
-        {/* Tooltip */}
-        {tooltip && (
+      {/* Graph + node list side by side */}
+      <div style={{ display: 'flex', gap: 12 }}>
+        <div ref={containerRef} style={{
+          flex: showNodeList ? '1 1 65%' : 1,
+          borderRadius: 8, overflow: 'hidden', position: 'relative',
+          minHeight: dimensions.h, background: 'rgba(0,0,0,0.15)',
+          border: '1px solid rgba(255,255,255,0.03)'
+        }}>
+          <svg ref={svgRef} style={{ width: '100%', height: dimensions.h, cursor: 'grab' }} />
+          {tooltip && (
+            <div style={{
+              position: 'absolute', left: tooltip.x, top: tooltip.y,
+              background: 'rgba(10,10,20,0.95)', border: '1px solid rgba(99,102,241,0.25)',
+              borderRadius: 8, padding: '6px 12px', fontSize: 11,
+              color: '#ccc', pointerEvents: 'none',
+              backdropFilter: 'blur(6px)', zIndex: 10,
+              maxWidth: 280,
+            }}>
+              <div style={{ fontWeight: 600, color: '#e0e0f0', marginBottom: tooltip.links ? 3 : 0 }}>
+                {tooltip.text}
+              </div>
+              {tooltip.links && (
+                <div style={{ fontSize: 10, color: '#8888aa', lineHeight: 1.5 }}>
+                  → {tooltip.links}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Node list */}
+        {showNodeList && sortedNodes.length > 0 && (
           <div style={{
-            position: 'absolute', left: tooltip.x, top: tooltip.y,
-            background: 'rgba(10,10,20,0.92)', border: '1px solid rgba(99,102,241,0.2)',
-            borderRadius: 6, padding: '4px 10px', fontSize: 11,
-            color: '#ccc', pointerEvents: 'none', whiteSpace: 'nowrap',
-            backdropFilter: 'blur(4px)', zIndex: 10
+            flex: '0 0 35%', maxHeight: dimensions.h, overflowY: 'auto',
+            borderRadius: 8, border: '1px solid rgba(255,255,255,0.03)',
+            background: 'rgba(0,0,0,0.1)', padding: '8px',
           }}>
-            {tooltip.text}
+            <div style={{ fontSize: 10, color: '#8888aa', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, padding: '0 4px' }}>
+              Notes sorted by links ({sortedNodes.length})
+            </div>
+            {sortedNodes.map(n => {
+              const conns = connectionCounts[n.id] || 0
+              const isActive = focusedNode === n.id
+              return (
+                <div key={n.id}
+                  onClick={() => setFocusedNode(isActive ? null : n.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '4px 8px', borderRadius: 4, cursor: 'pointer',
+                    fontSize: 11, marginBottom: 2,
+                    background: isActive ? 'rgba(99,102,241,0.1)' : 'transparent',
+                    color: isActive ? '#818cf8' : '#aaa',
+                    border: `1px solid ${isActive ? 'rgba(99,102,241,0.15)' : 'transparent'}`,
+                  }}
+                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
+                >
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: nodeColor(n.id, n.group), flexShrink: 0 }} />
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {shortId(n.id)}
+                  </span>
+                  <span style={{ fontSize: 9, color: '#666', flexShrink: 0 }}>
+                    {conns} link{conns !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
 
-      {/* Legend + Stats */}
+      {/* Legend */}
       <div style={{
         display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 10,
         fontSize: 11, alignItems: 'center', justifyContent: 'space-between'
       }}>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ color: '#8888aa', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'oklch(65% 0.15 210)', display: 'inline-block' }} />
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS[0], display: 'inline-block' }} />
             {existingCount} notes
           </span>
           <span style={{ color: '#666688', display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#444466', display: 'inline-block' }} />
-            {externalCount} external refs
+            {externalCount} refs
           </span>
-          <span style={{ color: '#666688' }}>🔗 {data.links.length} connections</span>
+          <span style={{ color: '#666688' }}>🔗 {filteredLinks.length} connections</span>
+          {focusedNode && (
+            <span style={{ color: '#818cf8' }}>
+              ✦ Focusing: {shortId(focusedNode)}
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setShowNodeList(!showNodeList)}
+            style={{
+              padding: '3px 10px', fontSize: 10,
+              background: showNodeList ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.03)',
+              border: `1px solid ${showNodeList ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.06)'}`,
+              borderRadius: 4, color: showNodeList ? '#818cf8' : '#666',
+              cursor: 'pointer'
+            }}>
+            {showNodeList ? 'Hide list' : 'Show list'}
+          </button>
           <span style={{ color: '#555577', fontSize: 10 }}>
-            Scroll to zoom · Drag to pan · 🔍 type to search
+            Scroll to zoom · Click node to focus · Hover for labels
           </span>
         </div>
       </div>
