@@ -27,11 +27,19 @@ type DreamingRec = {
 
 type DailySummary = {
   date: string
+  dayName: string
+  dayTheme: string
+  greeting: string
   hasNote: boolean
-  summary: string
-  standup: { weather: string; events: string; tip: string; vault: string } | null
-  weather: string
-  events: { start: string; end: string; title: string }[]
+  yesterday: { date: string; hasNote: boolean; items: string[]; total: number }
+  todayPlan: string[]
+  weekly: {
+    summary: string
+    tags: { tag: string; count: number }[]
+    activeDays: number
+    days: { date: string; theme: string; day: string }[]
+  }
+  suggestions: { category: string; text: string }[]
 }
 
 type CalendarEvent = {
@@ -182,59 +190,170 @@ export default function Dashboard() {
       </div>
 
       {/* ─── Daily Summary Card ─── */}
-      {dailySummary && dailySummary.hasNote && dailySummary.standup && (
+      {dailySummary && dailySummary.yesterday && (
         <div className="glass-card" style={{
           marginBottom: 20,
-          background: 'linear-gradient(135deg, rgba(15,23,42,0.92) 0%, rgba(30,15,50,0.92) 100%)',
+          background: 'linear-gradient(135deg, rgba(13,18,38,0.92) 0%, rgba(30,12,48,0.92) 100%)',
           border: '1px solid rgba(99,102,241,0.12)',
-          borderRadius: 14, padding: '18px 22px',
+          borderRadius: 14, padding: '20px 24px',
           position: 'relative', overflow: 'hidden'
         }}>
-          {/* subtle background glow */}
           <div style={{
-            position: 'absolute', top: '-40px', right: '-40px',
-            width: 180, height: 180, borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%)',
+            position: 'absolute', top: '-50px', right: '-40px',
+            width: 220, height: 220, borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(99,102,241,0.07) 0%, transparent 70%)',
             pointerEvents: 'none'
           }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-            <span style={{ fontSize: 24 }}>🌅</span>
+
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <span style={{ fontSize: 28 }}>🌅</span>
             <div>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
-                Good morning, Amos
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em' }}>
+                {dailySummary.greeting}, Amos
               </h3>
               <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
-                {dailySummary.date} · From your Morning Standup
+                {dailySummary.dayName} · {dailySummary.date}
+                {dailySummary.dayTheme && dailySummary.dayTheme !== dailySummary.dayName && (
+                  <> · <span style={{ color: 'var(--accent-indigo)' }}>{dailySummary.dayTheme}</span></>
+                )}
               </p>
             </div>
             <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)', background: 'rgba(99,102,241,0.08)', padding: '4px 10px', borderRadius: 20, border: '1px solid rgba(99,102,241,0.1)' }}>
-              📓 Daily note found
+              {dailySummary.hasNote ? '📓 Note logged' : '📓 No note yet'}
             </span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
-            {dailySummary.standup.weather && (
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', background: 'rgba(99,102,241,0.04)', borderRadius: 10, border: '1px solid rgba(99,102,241,0.06)' }}>
-                <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>🌤️</span>
-                <div>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Weather</div>
-                  <div style={{ fontSize: 12, color: '#c8c8e0', lineHeight: 1.4 }}>{dailySummary.standup.weather}</div>
+
+          {/* 3-column grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 16 }}>
+
+            {/* ─── Column 1: Yesterday ─── */}
+            <div style={{
+              padding: '12px 14px', borderRadius: 10,
+              background: 'rgba(99,102,241,0.03)', border: '1px solid rgba(99,102,241,0.06)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <span style={{ fontSize: 14 }}>🔙</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                  Yesterday
+                </span>
+                {dailySummary.yesterday.total > 0 && (
+                  <span style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--text-muted)' }}>{dailySummary.yesterday.total} items</span>
+                )}
+              </div>
+              {dailySummary.yesterday.items && dailySummary.yesterday.items.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {dailySummary.yesterday.items.map((item, i) => {
+                    const isChecked = item.startsWith('[x]') || item.startsWith('[X]')
+                    const text = item.replace(/^\[.\]\s*/, '').trim()
+                    return (
+                      <div key={i} style={{ display: 'flex', gap: 6, fontSize: 11, color: isChecked ? 'var(--accent-emerald)' : 'var(--text-secondary)', lineHeight: 1.4 }}>
+                        <span style={{ flexShrink: 0 }}>{isChecked ? '✅' : '◻️'}</span>
+                        <span>{text.length > 80 ? text.substring(0, 80) + '…' : text}</span>
+                      </div>
+                    )
+                  })}
                 </div>
-              </div>
-            )}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', background: 'rgba(99,102,241,0.04)', borderRadius: 10, border: '1px solid rgba(99,102,241,0.06)' }}>
-              <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>📅</span>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>Events</div>
-                <div style={{ fontSize: 12, color: '#c8c8e0', lineHeight: 1.4 }}>{dailySummary.standup.events || 'No events today'}</div>
-              </div>
+              ) : (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>No yesterday note recorded</div>
+              )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', background: 'rgba(99,102,241,0.04)', borderRadius: 10, border: '1px solid rgba(99,102,241,0.06)' }}>
-              <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>🎯</span>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>PE Tip</div>
-                <div style={{ fontSize: 12, color: '#c8c8e0', lineHeight: 1.4 }}>{dailySummary.standup.tip || 'No tip today'}</div>
+
+            {/* ─── Column 2: This Week ─── */}
+            <div style={{
+              padding: '12px 14px', borderRadius: 10,
+              background: 'rgba(99,102,241,0.03)', border: '1px solid rgba(99,102,241,0.06)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <span style={{ fontSize: 14 }}>📊</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                  This Week
+                </span>
+                <span style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--text-muted)' }}>
+                  {dailySummary.weekly?.activeDays || 0} days logged
+                </span>
               </div>
+              <div style={{ fontSize: 11, color: 'var(--accent-indigo)', fontWeight: 500, marginBottom: 8 }}>
+                {dailySummary.weekly?.summary || 'No data'}
+              </div>
+              {dailySummary.weekly?.tags && dailySummary.weekly.tags.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {dailySummary.weekly.tags.slice(0, 4).map((t, i) => (
+                    <span key={i} style={{
+                      fontSize: 9, padding: '2px 7px',
+                      background: 'rgba(99,102,241,0.08)',
+                      border: '1px solid rgba(99,102,241,0.1)',
+                      borderRadius: 4, color: 'var(--text-secondary)'
+                    }}>
+                      #{t.tag} ×{t.count}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {dailySummary.weekly?.days && dailySummary.weekly.days.length > 0 && (
+                <div style={{ marginTop: 8, display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                  {dailySummary.weekly.days.slice(0, 7).map((d, i) => {
+                    const hasTheme = !!d.theme
+                    return (
+                      <span key={i} style={{
+                        width: 22, height: 22, borderRadius: 6,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 9, fontWeight: 600,
+                        background: hasTheme ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.03)',
+                        color: hasTheme ? 'var(--accent-indigo)' : 'var(--text-muted)',
+                        border: `1px solid ${hasTheme ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.04)'}`,
+                        cursor: 'pointer'
+                      }} title={d.theme || d.day}>
+                        {d.day[0]}
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
             </div>
+
+            {/* ─── Column 3: Today's Suggestions ─── */}
+            <div style={{
+              padding: '12px 14px', borderRadius: 10,
+              background: 'linear-gradient(135deg, rgba(99,102,241,0.05) 0%, rgba(139,92,246,0.03) 100%)',
+              border: '1px solid rgba(99,102,241,0.08)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <span style={{ fontSize: 14 }}>💡</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                  Today's Suggestions
+                </span>
+              </div>
+              {dailySummary.suggestions && dailySummary.suggestions.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {dailySummary.suggestions.map((s, i) => {
+                    const iconMap: Record<string, string> = {
+                      pe_coaching: '🏃', research: '🔬', coding: '💻',
+                      vault: '📝', finance: '💰', wellness: '🧘',
+                      badminton: '🏸', career: '🎯'
+                    }
+                    return (
+                      <div key={i} style={{
+                        display: 'flex', gap: 8, alignItems: 'flex-start',
+                        padding: '8px 10px', borderRadius: 8,
+                        background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)',
+                        transition: 'all 0.2s'
+                      }}>
+                        <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>
+                          {iconMap[s.category] || '💡'}
+                        </span>
+                        <span style={{ fontSize: 11, color: '#cccce0', lineHeight: 1.4 }}>
+                          {s.text}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>Loading suggestions…</div>
+              )}
+            </div>
+
           </div>
         </div>
       )}

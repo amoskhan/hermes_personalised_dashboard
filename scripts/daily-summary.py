@@ -1,145 +1,293 @@
 #!/usr/bin/env python3
-"""Read today's (or most recent) daily note from Obsidian vault and return a summary."""
+"""
+Daily Summary Generator — Reads Obsidian vault for:
+1. What you did yesterday (from standup)
+2. Weekly patterns (last 7 days)
+3. Today's varied suggestions (different every day)
+"""
 
-import json, os, re, sys
+import json, os, re, random
 from datetime import datetime, timedelta
 
 VAULT_DIR = os.path.expanduser("~/ObsidianVault")
 NOTES_DIR = os.path.join(VAULT_DIR, "Notes")
+TZ_OFFSET = timedelta(hours=8)
+WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-TZ_OFFSET = timedelta(hours=8)  # SGT
+SUGGESTION_POOLS = {
+    "pe_coaching": [
+        "Try a new warm-up game for P1-P2 — focus on coordination 🏃",
+        "Review your last PE lesson — what engaged students most?",
+        "Plan one differentiated activity for mixed-ability classes ✏️",
+        "Record a 30-sec reflection on today's lesson 📱",
+        "Test a modified game rule to increase participation 🎯",
+        "Sketch next week's gymnastics unit plan 🤸",
+        "Observe 3 students' fundamental movement skills 👀",
+        "Research one new PE pedagogy method 📖",
+        "Plan a mini fitness circuit using only cones & hoops 🏋️",
+        "Think about one student who needs extra support — plan an adaptation",
+    ],
+    "research": [
+        "Search arXiv for 'exercise physiology children singapore' 🔬",
+        "Read one saved paper from your backlog — extract 3 findings 📄",
+        "Update your sports science research notes 📝",
+        "Check Balasekaran's latest on cloth mask physiology 🎭",
+        "Compare two PE pedagogy papers — what's the key difference? ⚖️",
+        "Draft a research question for a free afternoon 💭",
+        "Find a paper on motor skill development in primary kids 🧒",
+        "Review your sports science wiki — what's missing? 📚",
+        "Search for 'VO2max children pe games' — practical applications 📊",
+        "Write a one-paragraph summary of a paper for your notes ✍️",
+    ],
+    "coding": [
+        "Spend 30 min on the dashboard — pick one UI improvement 🖥️",
+        "Review GitHub repos for stale branches to clean 🧹",
+        "Add one small feature to the portfolio site 🌐",
+        "Check the Telegram bot for any updates needed 🤖",
+        "Refactor one component in the dashboard 🔧",
+        "Write a docstring for a function you wrote recently 📝",
+        "Look at the calendar widget — any edge cases? 📅",
+        "Explore VPS logs for recurring errors 🔍",
+        "Optimise one API endpoint for speed ⚡",
+        "Add error handling to a dashboard API that's missing it 🛡️",
+    ],
+    "vault": [
+        "Link two related notes that aren't connected yet 🔗",
+        "Tag any unlabelled entries from this week 🏷️",
+        "Check for broken links — fix at least one 🔧",
+        "Create a MOC for a topic you've been exploring 🗺️",
+        "Archive notes older than 2 weeks 📦",
+        "Add a reference from a recent paper to your research notes 📄",
+        "Review the Insights page — update with this week's learnings 💡",
+        "Run vault health check and review stats 📊",
+        "Add today's daily note while it's fresh in mind ✏️",
+        "Consolidate scattered notes on one topic into a single page 📋",
+    ],
+    "finance": [
+        "Review your monthly spending so far 💰",
+        "Check for unclassified PayLah transactions 🔍",
+        "Update your net worth tracker 📈",
+        "Review subscriptions — any to cancel? 🔄",
+        "Check CPF/savings progress toward HDB goal 🏠",
+        "Set aside 10 min to review monthly budget 📋",
+    ],
+    "wellness": [
+        "Take a 10-min walk between tasks today 🚶",
+        "Hydrate — aim for 2L with this heat 💧",
+        "Stretch for 5 min after PE today 🤸",
+        "Plan your meals for the rest of the week 🥗",
+        "Log your sleep and activity for today 📱",
+        "Breathing exercise before bed — 4-7-8 technique 🧘",
+    ],
+    "badminton": [
+        "Review your footwork drills — one to practice 🏸",
+        "Check if there's a court available this evening 🏟️",
+        "Watch a 5-min pro match highlight — note one technique 🎥",
+        "Pack your badminton bag for tomorrow's session 🎒",
+        "Practice 10 min of shadow footwork at home 👣",
+    ],
+    "career": [
+        "Review GEO2→GEO3 progress — next milestone? 🎯",
+        "Note one teaching win from this week for your portfolio ✨",
+        "Look up MOE PD courses for this term 🎓",
+        "Update LinkedIn/portfolio with a recent accomplishment 📋",
+        "Think about one non-MOE path (wellness/coaching/edtech) 🤔",
+    ],
+}
 
-def today_str():
-    return (datetime.utcnow() + TZ_OFFSET).strftime("%Y-%m-%d")
+def today_sgt():
+    return datetime.utcnow() + TZ_OFFSET
 
-def find_daily_note():
-    """Find today's note, or the most recent one."""
-    today = today_str()
-    today_path = os.path.join(NOTES_DIR, f"{today}.md")
-    if os.path.exists(today_path):
-        return today_path, "today"
+def date_str(dt=None):
+    return (dt or today_sgt()).strftime("%Y-%m-%d")
 
-    # Find most recent
-    dates = []
-    for f in os.listdir(NOTES_DIR):
-        m = re.match(r"(\d{4}-\d{2}-\d{2})\.md$", f)
-        if m:
-            dates.append(m.group(1))
-    dates.sort(reverse=True)
-    if dates:
-        recent = os.path.join(NOTES_DIR, f"{dates[0]}.md")
-        return recent, dates[0]
-    return None, None
+def weekday_name(dt=None):
+    return WEEKDAYS[(dt or today_sgt()).weekday()]
 
-def parse_note(path):
-    """Extract sections from a markdown daily note."""
+def read_note(date_s):
+    path = os.path.join(NOTES_DIR, f"{date_s}.md")
+    if not os.path.exists(path):
+        return None
     with open(path) as f:
-        text = f.read()
+        return f.read()
 
-    sections = {"title": "", "weather": "", "schedule": "", "standup": "", "other": []}
-
+def extract_yesterday_summary(text):
     lines = text.split("\n")
-    current_section = "other"
-    current_lines = []
+    in_section = False
+    items = []
+    for line in lines:
+        if "What did I do yesterday" in line:
+            in_section = True
+            continue
+        if in_section:
+            if re.match(r"^##", line) or "What will I do today" in line or "Any blockers" in line:
+                break
+            s = line.strip()
+            if s.startswith("-"):
+                items.append(s.lstrip("- ").strip())
+    return items[:6]
 
-    # Section headers: ## Something
-    section_map = {
-        "weather": ["weather", "🌤️"],
-        "schedule": ["schedule", "📅"],
-        "standup": ["standup", "morning"],
+def extract_today_plan(text):
+    lines = text.split("\n")
+    in_section = False
+    items = []
+    for line in lines:
+        if "What will I do today" in line:
+            in_section = True
+            continue
+        if in_section:
+            if re.match(r"^##", line) or "Any blockers" in line:
+                break
+            s = line.strip()
+            if s.startswith("-"):
+                # preserve checkbox state
+                items.append(s.lstrip("- ").strip())
+    return items[:6]
+
+def extract_day_theme(text):
+    m = re.search(r'>\s*\*\*Day theme:\*\*\s*(.+?)(?:\n|$)', text)
+    return m.group(1).strip() if m else ""
+
+def extract_tags(text):
+    tags = re.findall(r'#([\w-]+)', text)
+    return [t for t in tags if t.lower() not in (
+        "daily-log", "lesson-plan", "project", "research"
+    )][:8]
+
+def get_weekly_summary():
+    today = today_sgt()
+    days = []
+    tags = []
+    for i in range(1, 8):
+        d = today - timedelta(days=i)
+        ds = date_str(d)
+        text = read_note(ds)
+        if text:
+            theme = extract_day_theme(text)
+            days.append({"date": ds, "theme": theme, "day": WEEKDAYS[d.weekday()]})
+            tags.extend(extract_tags(text))
+    
+    tag_counts = {}
+    for t in tags:
+        tag_counts[t] = tag_counts.get(t, 0) + 1
+    top_tags = sorted(tag_counts.items(), key=lambda x: -x[1])[:5]
+    
+    themes = [d["theme"] for d in days if d["theme"]]
+    summary_parts = []
+    if any("teaching" in t.lower() for t in themes):
+        summary_parts.append("Teaching week 🏫")
+    if any("research" in t.lower() for t in themes):
+        summary_parts.append("Research active 🔬")
+    if any("rest" in t.lower() for t in themes):
+        summary_parts.append("Had rest days 😌")
+    if any("cowork" in t.lower() or "enterprise" in t.lower() for t in themes):
+        summary_parts.append("Coworking 💼")
+    if any("badminton" in t.lower() for t in themes):
+        summary_parts.append("Badminton 🏸")
+    
+    return {
+        "summary": " · ".join(summary_parts) if summary_parts else "Quiet week",
+        "tags": [{"tag": t, "count": c} for t, c in top_tags],
+        "activeDays": len(days),
+        "days": [{"date": d["date"], "theme": d["theme"], "day": d["day"]} for d in days]
     }
 
-    def flush():
-        nonlocal current_lines
-        text = "\n".join(current_lines).strip()
-        if text:
-            if current_section == "other":
-                sections["other"].append(text)
-            else:
-                sections[current_section] = text
-        current_lines = []
-
-    for line in lines:
-        h_match = re.match(r"^##\s+(.+)$", line)
-        if h_match:
-            flush()
-            heading = h_match.group(1).lower()
-            current_section = "other"
-            for key, keywords in section_map.items():
-                if any(kw in heading for kw in keywords):
-                    current_section = key
-                    break
-            current_lines = []
-        else:
-            current_lines.append(line)
-    flush()
-
-    # Extract title (first # line)
-    t_match = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
-    if t_match:
-        sections["title"] = t_match.group(1)
-
-    return sections
-
-def extract_standup_summary(standup_text):
-    """Extract structured info from the Morning Standup block."""
-    result = {"weather": "", "events": "", "tip": "", "vault": ""}
-    lines = standup_text.split("\n")
-    for line in lines:
-        line_lower = line.lower()
-        if "weather" in line_lower and ":" in line:
-            result["weather"] = line.split(":", 1)[1].strip().lstrip("*").lstrip("**").strip()
-        elif "event" in line_lower and ":" in line:
-            result["events"] = line.split(":", 1)[1].strip().lstrip("*").lstrip("**").strip()
-        elif "tip" in line_lower or "pe" in line_lower:
-            result["tip"] = line.split(":", 1)[1].strip().lstrip("*").lstrip("**").strip() if ":" in line else line.strip()
-        elif "vault" in line_lower:
-            result["vault"] = line.split(":", 1)[1].strip().lstrip("*").lstrip("**").strip() if ":" in line else line.strip()
-    return result
+def generate_suggestions(today, weekly, yesterday_items):
+    dt = today
+    day_idx = dt.weekday()
+    rng = random.Random(f"{date_str(dt)}-v2")
+    
+    if day_idx == 5:
+        focus = "weekend"
+    elif day_idx == 6:
+        focus = "rest"
+    elif day_idx == 2:
+        focus = "cowork"
+    elif day_idx == 4:
+        focus = "badminton_day"
+    else:
+        focus = "teaching"
+    
+    cat_priorities = {
+        "teaching": ["pe_coaching", "career", "vault", "research"],
+        "cowork": ["coding", "research", "vault", "pe_coaching"],
+        "badminton_day": ["badminton", "pe_coaching", "research", "vault"],
+        "weekend": ["vault", "coding", "research", "finance", "wellness"],
+        "rest": ["wellness", "vault", "finance", "reading"],
+    }
+    
+    cats = cat_priorities.get(focus, list(SUGGESTION_POOLS.keys()))
+    rng.shuffle(cats)
+    
+    suggestions = []
+    used_texts = set()
+    for cat in cats[:4]:
+        pool = SUGGESTION_POOLS.get(cat, [])
+        rng.shuffle(pool)
+        for s in pool:
+            if s not in used_texts:
+                suggestions.append({"category": cat, "text": s})
+                used_texts.add(s)
+                break
+        if len(suggestions) >= 3:
+            break
+    
+    return suggestions[:3]
 
 def main():
-    path, date_label = find_daily_note()
-    if not path:
-        print(json.dumps({
-            "date": today_str(),
-            "hasNote": False,
-            "summary": "No daily note found for today.",
-            "standup": None,
-            "weather": "",
-            "events": [],
-            "sections": {}
-        }))
-        return
-
-    sections = parse_note(path)
-    standup_raw = sections.get("standup", "")
-    standup = extract_standup_summary(standup_raw) if standup_raw else None
-
-    # Parse events from schedule section
-    events = []
-    sched = sections.get("schedule", "")
-    for line in sched.split("\n"):
-        m = re.match(r"-\s+(\d{2}:\d{2})-(\d{2}:\d{2})\s+(.+)", line)
-        if m:
-            events.append({"start": m.group(1), "end": m.group(2), "title": m.group(3).strip()})
-
-    # Clean up weather section to brief text
-    weather_text = sections.get("weather", "")
-    brief_weather = ""
-    for line in weather_text.split("\n"):
-        if "temperature" in line.lower() and "feels" in line.lower():
-            brief_weather += line.strip() + " | "
-        if "condition" in line.lower():
-            brief_weather += line.strip()
-
+    today = today_sgt()
+    yesterday = today - timedelta(days=1)
+    today_s = date_str(today)
+    yesterday_s = date_str(yesterday)
+    
+    today_note = read_note(today_s)
+    yesterday_note = read_note(yesterday_s)
+    
+    # Yesterday recap
+    yesterday_items = []
+    if yesterday_note:
+        yesterday_items = extract_yesterday_summary(yesterday_note)
+    if not yesterday_items and today_note:
+        # fallback: today's note references yesterday
+        yesterday_items = extract_yesterday_summary(today_note)
+    
+    # Today's planned items
+    today_plan = extract_today_plan(today_note) if today_note else []
+    
+    # Weekly trends
+    weekly = get_weekly_summary()
+    
+    # Fresh daily suggestions
+    suggestions = generate_suggestions(today, weekly, yesterday_items)
+    
+    # Today's theme
+    today_theme = extract_day_theme(today_note) if today_note else ""
+    day_name = weekday_name(today)
+    
+    # Greeting based on time of day
+    h = today.hour
+    if h < 12: greeting = "Good morning"
+    elif h < 17: greeting = "Good afternoon"
+    else: greeting = "Good evening"
+    
+    is_weekend = today.weekday() >= 5
+    day_theme_str = today_theme or (f"{day_name} — free day" if is_weekend else day_name)
+    
     result = {
-        "date": date_label if date_label != "today" else today_str(),
-        "hasNote": True,
-        "sections": sections,
-        "standup": standup,
-        "weather": brief_weather or sections.get("weather", "")[:200],
-        "events": events,
-        "summary": standup.get("weather", "") if standup else ""
+        "date": today_s,
+        "dayName": day_name,
+        "dayTheme": day_theme_str,
+        "hasNote": today_note is not None,
+        "greeting": greeting,
+        "yesterday": {
+            "date": yesterday_s,
+            "hasNote": yesterday_note is not None,
+            "items": yesterday_items,
+            "total": len(yesterday_items)
+        },
+        "todayPlan": today_plan,
+        "weekly": weekly,
+        "suggestions": suggestions
     }
     print(json.dumps(result))
 
