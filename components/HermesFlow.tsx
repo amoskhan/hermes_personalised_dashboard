@@ -1,15 +1,15 @@
 import { useState } from 'react'
 
 const NODES = [
-  { id: 'you',      x: 15,  y: 60,  w: 130, h: 55,  label: 'You',       icon: '👤', color: '#22c55e', bg: '#064e3b', desc: 'You interact with Hermes via Telegram. Send messages, ask questions, request tasks. Hermes responds with full context from past conversations.' },
-  { id: 'telegram', x: 15,  y: 155, w: 130, h: 55,  label: 'Telegram',  icon: '💬', color: '#818cf8', bg: '#1e1b4b', desc: 'Your messaging platform. Messages are routed to Hermes Agent for AI processing. Supports text, images, files & voice.' },
-  { id: 'hermes',   x: 210, y: 95,  w: 150, h: 80,  label: 'Hermes Agent', icon: '🧠', color: '#a78bfa', bg: '#2e1065', desc: 'The AI brain — powered by deepseek-v4-flash on OpenRouter. Decides which tools to use, reads/writes memory, and responds intelligently to every prompt.' },
-  { id: 'skills',   x: 425, y: 15,  w: 170, h: 100, label: 'Skills & Tools', icon: '🔧', color: '#fbbf24', bg: '#451a03', desc: 'Modular capabilities: Calendar (Google), GitHub (repos/commits), Research (arXiv), Memory (persistent), Files (read/write/search), Terminal (shell) and more.' },
-  { id: 'cron',     x: 425, y: 145, w: 170, h: 55,  label: 'Cron Jobs', icon: '⏰', color: '#67e8f9', bg: '#083344', desc: 'Background tasks: daily summaries at 6/12/17 SGT, vault health checks, dreaming engine, and messages watchdog every hour.' },
-  { id: 'vault',    x: 210, y: 215, w: 150, h: 55,  label: 'Obsidian Vault', icon: '📓', color: '#c084fc', bg: '#3b0764', desc: 'Your knowledge base — 95 notes across 26 folders: daily logs, lesson plans, finances, projects, research, reading. Read for contextual suggestions.' },
-  { id: 'kb',       x: 15,  y: 215, w: 130, h: 55,  label: 'Knowledge Base', icon: '💾', color: '#f472b6', bg: '#4c0519', desc: 'Persistent memory across sessions. Stores your profile, environment facts, and learned preferences. Injected into every conversation.' },
-  { id: 'dashboard', x: 425, y: 240, w: 170, h: 55,  label: 'Dashboard', icon: '📊', color: '#2dd4bf', bg: '#134e4a', desc: 'This page — Visual OS. Shows model usage, vault graph, calendar, suggestions, live messages, ROI tracking. Hosted on VPS port 3001 + Vercel.' },
-  { id: 'vps',      x: 625, y: 130, w: 105, h: 55,  label: 'VPS Server', icon: '🖥️', color: '#94a3b8', bg: '#1e293b', desc: 'Your server at 43.156.249.23. Runs Hermes Agent, Next.js dashboard (port 3001), and all cron jobs. Code lives at ~/visual-os/.' },
+  { id: 'you',       x: 12,  y: 38,  w: 85,  h: 35,  label: 'You',          icon: '👤', color: '#22c55e', bg: '#064e3b', desc: 'You interact with Hermes via Telegram. Hermes responds with full context from past conversations.' },
+  { id: 'telegram',  x: 12,  y: 88,  w: 85,  h: 35,  label: 'Telegram',     icon: '💬', color: '#818cf8', bg: '#1e1b4b', desc: 'Your messaging platform. Messages are routed to Hermes Agent for AI processing.' },
+  { id: 'hermes',    x: 130, y: 35,  w: 110, h: 50,  label: 'Hermes Agent', icon: '🧠', color: '#a78bfa', bg: '#2e1065', desc: 'The AI brain — powered by Claude Sonnet 4 via Anthropic. Decides which tools to use, reads memory, responds intelligently.' },
+  { id: 'skills',    x: 280, y: 15,  w: 120, h: 68,  label: 'Skills & Tools', icon: '🔧', color: '#fbbf24', bg: '#451a03', desc: 'Calendar, GitHub, Research, Memory, Files, Terminal, and 20+ more tools.' },
+  { id: 'vault',     x: 280, y: 92,  w: 120, h: 34,  label: 'Obsidian Vault', icon: '📓', color: '#c084fc', bg: '#3b0764', desc: 'Your knowledge base — 95 notes across 26 folders.' },
+  { id: 'kb',        x: 280, y: 137, w: 120, h: 34,  label: 'Knowledge Base', icon: '💾', color: '#f472b6', bg: '#4c0519', desc: 'Persistent memory across sessions. Stores profile, environment facts, preferences.' },
+  { id: 'dashboard', x: 280, y: 182, w: 120, h: 34,  label: 'Dashboard',    icon: '📊', color: '#2dd4bf', bg: '#134e4a', desc: 'Visual OS — model usage, vault graph, calendar, suggestions, live messages, ROI.' },
+  { id: 'cron',      x: 280, y: 227, w: 120, h: 34,  label: 'Cron Jobs',    icon: '⏰', color: '#67e8f9', bg: '#083344', desc: 'Background tasks: daily summaries, vault health checks, dreaming engine.' },
+  { id: 'vps',       x: 12,  y: 227, w: 230, h: 36,  label: 'VPS Server',   icon: '🖥️', color: '#94a3b8', bg: '#1e293b', desc: 'Your server at 43.156.249.23. Runs Hermes, dashboard (port 3001), and cron.' },
 ]
 
 const SKILL_LABELS = ['Calendar', 'GitHub', 'Research', 'Memory', 'Files', 'Terminal']
@@ -94,23 +94,33 @@ export default function HermesFlow() {
         </div>
       </div>
 
-      <svg viewBox="0 0 760 330" style={{ width: '100%', height: 'auto', display: 'block', marginBottom: -4 }}>
+      <svg viewBox="0 0 580 320" style={{ width: '100%', height: 'auto', display: 'block', marginBottom: -4 }}>
         <defs>
           <filter id="hf-shadow">
             <feDropShadow dx="0" dy="3" stdDeviation="6" floodColor="#000" floodOpacity="0.6" />
           </filter>
-          <marker id="hf-arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-            <polygon points="0 0, 8 3, 0 6" fill="#7777bb" />
+          <marker id="hf-arrow" markerWidth="5" markerHeight="4" refX="5" refY="2" orient="auto">
+            <polygon points="0 0, 5 2, 0 4" fill="#8888cc" />
           </marker>
-          <marker id="hf-arrow-active" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 9 3.5, 0 7" fill="#c4b5fd" />
+          <marker id="hf-arrow-active" markerWidth="6" markerHeight="4.5" refX="6" refY="2.25" orient="auto">
+            <polygon points="0 0, 6 2.25, 0 4.5" fill="#c4b5fd" />
           </marker>
         </defs>
 
         {/* Diagram background */}
-        <rect x="0" y="0" width="760" height="330" fill="#07070b" rx="0" />
+        <rect x="0" y="0" width="580" height="320" fill="#07070b" rx="0" />
 
-        {/* Arrows */}
+        {/* Background zone labels */}
+        <text x={54} y={12} fill="#555578" fontSize={8} textAnchor="middle" fontWeight={600} letterSpacing="2">USER</text>
+        <text x={185} y={12} fill="#555578" fontSize={8} textAnchor="middle" fontWeight={600} letterSpacing="2">AGENT</text>
+        <text x={340} y={12} fill="#555578" fontSize={8} textAnchor="middle" fontWeight={600} letterSpacing="2">SKILLS & KNOWLEDGE</text>
+        <text x={127} y={305} fill="#555578" fontSize={8} textAnchor="middle" fontWeight={600} letterSpacing="2">INFRASTRUCTURE</text>
+
+        {/* Subtle vertical zone dividers */}
+        <line x1={114} y1={24} x2={114} y2={220} stroke="#ffffff08" strokeWidth={1} />
+        <line x1={255} y1={24} x2={255} y2={220} stroke="#ffffff08" strokeWidth={1} />
+
+        {/* Arrows — solid by default, no dashed lines */}
         {ARROWS.map(a => {
           const hl = isHighlighted(a.from) && isHighlighted(a.to)
           const path = arrowPath(a.from, a.to)
@@ -118,16 +128,15 @@ export default function HermesFlow() {
           return (
             <g key={`${a.from}-${a.to}`}>
               <path d={path} fill="none"
-                stroke={hl ? '#c4b5fd' : '#5a5a8a'}
-                strokeWidth={hl ? 2.5 : 1.5}
-                strokeOpacity={hl ? 1 : 0.5}
-                strokeDasharray={hl ? 'none' : '6 4'}
+                stroke={hl ? '#c4b5fd' : '#6666aa'}
+                strokeWidth={hl ? 1.8 : 1.2}
+                strokeOpacity={hl ? 1 : 0.55}
                 markerEnd={hl ? 'url(#hf-arrow-active)' : 'url(#hf-arrow)'}
                 style={{ transition: 'all 0.3s' }}
               />
               <text x={lp.x} y={lp.y}
-                fill={hl ? '#ddd6fe' : '#8888bb'}
-                  fontSize={10} textAnchor="middle" fontWeight={hl ? 700 : 500}
+                fill={hl ? '#ddd6fe' : '#9999bb'}
+                  fontSize={6} textAnchor="middle" fontWeight={hl ? 700 : 500}
                 style={{ transition: 'all 0.3s' }}>
                 {a.label}
               </text>
@@ -137,9 +146,9 @@ export default function HermesFlow() {
 
         {/* Skill sub-labels */}
         {SKILL_LABELS.map((s, i) => (
-          <text key={s} x={433} y={47 + i * 13} fill="#e2e8f0" fontSize={10} fontWeight={600}>▸ {s}</text>
+          <text key={s} x={283} y={38 + i * 8} fill="#e2e8f0" fontSize={7} fontWeight={600}>▸ {s}</text>
         ))}
-        <text x={433} y={102} fill="#94a3b8" fontSize={9} fontStyle="italic">+ 20 more tools</text>
+        <text x={283} y={78} fill="#94a3b8" fontSize={6} fontStyle="italic">+ 20 more tools</text>
 
         {/* Nodes */}
         {NODES.map(n => {
@@ -155,29 +164,29 @@ export default function HermesFlow() {
               style={{ cursor: 'pointer', opacity: dimmed ? 0.15 : 1, transition: 'opacity 0.3s' }}
             >
               {/* Main card — SOLID visible background */}
-              <rect x={n.x} y={n.y} width={n.w} height={n.h} rx={10} ry={10}
+              <rect x={n.x} y={n.y} width={n.w} height={n.h} rx={8} ry={8}
                 fill={n.bg}
                 stroke={isSelected ? n.color : (hl ? n.color + 'cc' : n.color + '60')}
-                strokeWidth={isSelected ? 2.5 : (hl ? 2 : 1.5)}
+                strokeWidth={isSelected ? 1.8 : (hl ? 1.5 : 1.0)}
                 filter="url(#hf-shadow)"
                 style={{ transition: 'all 0.3s' }}
               />
 
               {/* Glow border on select */}
               {isSelected && (
-                <rect x={n.x - 2} y={n.y - 2} width={n.w + 4} height={n.h + 4} rx={12} ry={12}
-                  fill="none" stroke={n.color} strokeWidth={2} strokeOpacity={0.6} />
+                <rect x={n.x - 1} y={n.y - 1} width={n.w + 2} height={n.h + 2} rx={9} ry={9}
+                  fill="none" stroke={n.color} strokeWidth={1.2} strokeOpacity={0.6} />
               )}
 
               {/* Icon */}
-              <text x={n.x + 18} y={n.y + n.h / 2 + 6} fontSize={22} textAnchor="middle" dominantBaseline="middle">
+              <text x={n.x + 13} y={n.y + n.h / 2 + 4} fontSize={14} textAnchor="middle" dominantBaseline="middle">
                 {n.icon}
               </text>
 
               {/* Label */}
-              <text x={n.x + 40} y={n.y + n.h / 2 + 2}
+              <text x={n.x + 25} y={n.y + n.h / 2 + 1}
                 fill={isSelected ? '#fff' : (hl ? '#fff' : '#e2e8f0')}
-                fontSize={isSelected ? 13 : 12}
+                fontSize={isSelected ? 8 : 7}
                 fontWeight={isSelected ? 700 : 600}
                 style={{ transition: 'all 0.3s' }}>
                 {n.label}
@@ -187,26 +196,26 @@ export default function HermesFlow() {
         })}
 
         {/* VPS IP */}
-        <text x={677} y={200} fill="#94a3b8" fontSize={11} textAnchor="middle">43.156.249.23</text>
+        <text x={127} y={303} fill="#64748b" fontSize={6} textAnchor="middle">43.156.249.23</text>
       </svg>
 
       {/* Info panel */}
       {selectedNode && (
         <div style={{ padding: '18px 22px', borderTop: '1px solid rgba(255,255,255,0.06)', background: selectedNode.bg }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-            <span style={{ fontSize: 32 }}>{selectedNode.icon}</span>
+            <span style={{ fontSize: 26 }}>{selectedNode.icon}</span>
             <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <span style={{ fontSize: 18, fontWeight: 700, color: selectedNode.color }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: selectedNode.color }}>
                   {selectedNode.label}
                 </span>
-                <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 4,
+                <span style={{ fontSize: 9, padding: '2px 7px', borderRadius: 4,
                   background: selectedNode.color + '25', color: selectedNode.color,
                   border: `1px solid ${selectedNode.color}40` }}>
-                  Click again to close
+                  Click to close
                 </span>
               </div>
-              <div style={{ fontSize: 14, color: '#e2e8f0', lineHeight: 1.7, fontWeight: 400 }}>
+              <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.6, fontWeight: 400 }}>
                 {selectedNode.desc}
               </div>
             </div>

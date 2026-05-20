@@ -107,7 +107,7 @@ export default function Dashboard() {
   // Mini bar data
   const maxToken = Math.max(...(usage?.dailyUsage.map(d => d.tokens) || [1]), 1)
 
-  const modelTag = usage?.model || 'deepseek-v4-flash'
+  const modelTag = usage?.model || 'Loading...'
   const isFree = usage?.totalCost === 0
 
   return (
