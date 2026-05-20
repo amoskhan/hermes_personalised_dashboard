@@ -4,6 +4,7 @@ import {
 } from 'recharts'
 import ForceGraph from '../../components/ForceGraph'
 import LiveMessages from '../../components/LiveMessages'
+import HermesFlow from '../../components/HermesFlow'
 
 type UsageData = {
   totalCost: number
@@ -904,6 +905,9 @@ export default function Dashboard() {
 
       {/* ─── Live Messages ─── */}
       <LiveMessages />
+
+      {/* ─── How Hermes Works ─── */}
+      <HermesFlow />
 
       {/* ─── Models Quick Reference ─── */}
       {models.length > 0 && (
