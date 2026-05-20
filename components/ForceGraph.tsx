@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import * as d3 from 'd3'
 
-interface GraphNode { id: string; group: number; size: number }
+interface GraphNode { id: string; group: number; size: number; folder?: string }
 interface GraphLink { source: string; target: string; count: number }
 interface GraphData { nodes: GraphNode[]; links: GraphLink[] }
 
@@ -16,11 +16,22 @@ interface NoteContent {
   totalLines: number
 }
 
-const COLORS = [
-  '#6366f1', '#22c55e', '#06b6d4', '#f59e0b',
-  '#ef4444', '#ec4899', '#8b5cf6', '#14b8a6',
-  '#f97316', '#a855f7',
-]
+const FOLDER_COLORS: Record<string, string> = {
+  'Notes':        '#6366f1', // indigo
+  'Teaching':     '#22c55e', // green
+  'Projects':     '#f59e0b', // amber
+  'Finances':     '#06b6d4', // cyan
+  'Personal':     '#ec4899', // pink
+  'Reading':      '#8b5cf6', // purple
+  'Research':     '#14b8a6', // teal
+  'Wiki':         '#f97316', // orange
+  'knowledge-base': '#a855f7', // violet
+  'Dashboards':   '#ef4444', // red
+  'references':   '#64748b', // slate
+  'Scripts':      '#84cc16', // lime
+  '06-media':     '#e11d48', // rose
+  'root':         '#6366f1', // indigo (default)
+}
 
 export default function ForceGraph({ data }: { data: GraphData }) {
   const svgRef = useRef<SVGSVGElement>(null)
@@ -153,11 +164,9 @@ export default function ForceGraph({ data }: { data: GraphData }) {
     return s.length > 24 ? s.slice(0, 21) + '…' : s
   }
 
-  const nodeColor = (id: string, group: number) => {
+  const nodeColor = (id: string, group: number, folder?: string) => {
     if (group === 2) return '#444466'
-    let hash = 0
-    for (let i = 0; i < id.length; i++) hash = ((hash << 5) - hash) + id.charCodeAt(i)
-    return COLORS[Math.abs(hash) % COLORS.length]
+    return FOLDER_COLORS[folder || 'root'] || '#6366f1'
   }
 
   // ────────────────── MAIN D3 RENDER ──────────────────
@@ -211,7 +220,7 @@ export default function ForceGraph({ data }: { data: GraphData }) {
       .data(filteredNodes)
       .join('circle')
       .attr('r', d => radius(d.id))
-      .attr('fill', d => nodeColor(d.id, d.group))
+      .attr('fill', d => nodeColor(d.id, d.group, d.folder))
       .attr('stroke', d => d.group === 1 ? '#1a1a3e' : 'none')
       .attr('stroke-width', 1)
       .attr('opacity', 0.85)
@@ -624,9 +633,11 @@ export default function ForceGraph({ data }: { data: GraphData }) {
             <div style={{ fontSize: 10, color: '#8888aa', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, padding: '0 4px' }}>
               Notes ({sortedNodes.length})
             </div>
-            {sortedNodes.map(n => {
+              {sortedNodes.map(n => {
               const conns = connectionCounts[n.id] || 0
               const isActive = selectedNote === n.id
+              const folder = n.folder || ''
+              const folderLabel = folder === 'root' ? '' : <span style={{ fontSize: 9, color: '#555', flexShrink: 0 }}>{folder.split('/')[0]}</span>
               return (
                 <div key={n.id}
                   onClick={() => { setSelectedNote(n.id); setFocusedNode(n.id) }}
@@ -638,8 +649,9 @@ export default function ForceGraph({ data }: { data: GraphData }) {
                     color: isActive ? '#22c55e' : '#aaa',
                     border: `1px solid ${isActive ? 'rgba(34,197,94,0.15)' : 'transparent'}`,
                   }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: nodeColor(n.id, n.group), flexShrink: 0 }} />
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: nodeColor(n.id, n.group, n.folder), flexShrink: 0 }} />
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shortId(n.id)}</span>
+                  {folderLabel}
                   <span style={{ fontSize: 9, color: '#666', flexShrink: 0 }}>{conns} link{conns !== 1 ? 's' : ''}</span>
                 </div>
               )
@@ -654,15 +666,22 @@ export default function ForceGraph({ data }: { data: GraphData }) {
         fontSize: 11, alignItems: 'center', justifyContent: 'space-between'
       }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ color: '#8888aa', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS[0], display: 'inline-block' }} />
-            {existingCount} notes
-          </span>
-          <span style={{ color: '#666688', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#444466', display: 'inline-block' }} />
+          {/* Folder legend */}
+          {Object.entries(FOLDER_COLORS).filter(([f]) => f !== 'root').map(([folder, color]) => {
+            const count = filteredNodes.filter(n => n.folder === folder).length
+            if (count === 0) return null
+            return (
+              <span key={folder} style={{ color: '#8888aa', display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, display: 'inline-block' }} />
+                {folder} ({count})
+              </span>
+            )
+          })}
+          <span style={{ color: '#666688', display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#444466', display: 'inline-block' }} />
             {externalCount} refs
           </span>
-          <span style={{ color: '#666688' }}>🔗 {filteredLinks.length} connections</span>
+          <span style={{ color: '#666688', fontSize: 10 }}>🔗 {filteredLinks.length} connections</span>
           {selectedNote && noteContent && (
             <span style={{ color: '#22c55e' }}>📖 Previewing: {shortId(selectedNote)}</span>
           )}

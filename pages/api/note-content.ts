@@ -3,7 +3,30 @@ import fs from 'fs'
 import path from 'path'
 
 const VAULT_DIR = '/home/ubuntu/ObsidianVault'
-const NOTES_DIR = path.join(VAULT_DIR, 'Notes')
+
+function findNoteFile(name: string): string | null {
+  // Search the entire vault recursively for a matching .md file
+  function walk(dir: string): string | null {
+    let entries
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return null }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.') || entry.name === '.git' || entry.name === '.obsidian') continue
+      const fullPath = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        const found = walk(fullPath)
+        if (found) return found
+      } else if (entry.isFile() && entry.name === `${name}.md`) {
+        return fullPath
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        // Also check if the relative path (without extension) matches
+        const relPath = path.relative(VAULT_DIR, fullPath).replace(/\.md$/, '')
+        if (relPath === name) return fullPath
+      }
+    }
+    return null
+  }
+  return walk(VAULT_DIR)
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { name } = req.query
@@ -13,9 +36,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Sanitize — prevent path traversal
   const cleanName = name.replace(/\.\.\//g, '').replace(/^~/, '').replace(/[<>"|]/g, '')
-  const filePath = path.join(NOTES_DIR, `${cleanName}.md`)
+  const filePath = findNoteFile(cleanName)
 
-  if (!fs.existsSync(filePath)) {
+  if (!filePath) {
     return res.status(404).json({ error: 'Note not found', name: cleanName })
   }
 
@@ -55,16 +78,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Get backlinks (notes that link to this note)
   let backlinks: string[] = []
   try {
-    const files = fs.readdirSync(NOTES_DIR).filter((f: string) => f.endsWith('.md'))
-    backlinks = files
-      .filter((f: string) => {
-        const fName = f.replace('.md', '')
-        if (fName === cleanName) return false
-        const fContent = fs.readFileSync(path.join(NOTES_DIR, f), 'utf-8')
-        return fContent.includes(`[[${cleanName}]]`)
-      })
-      .map((f: string) => f.replace('.md', ''))
-      .slice(0, 10)
+    function walkForBacklinks(dir: string) {
+      let entries
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+      for (const entry of entries) {
+        if (entry.name.startsWith('.') || entry.name === '.git' || entry.name === '.obsidian') continue
+        const fullPath = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          walkForBacklinks(fullPath)
+        } else if (entry.isFile() && entry.name.endsWith('.md')) {
+          const relPath = path.relative(VAULT_DIR, fullPath).replace(/\.md$/, '')
+          if (relPath === cleanName) continue
+          const fContent = fs.readFileSync(fullPath, 'utf-8')
+          if (fContent.includes(`[[${cleanName}]]`)) {
+            backlinks.push(relPath)
+          }
+        }
+      }
+    }
+    walkForBacklinks(VAULT_DIR)
+    backlinks = backlinks.slice(0, 10)
   } catch {}
 
   const fullContent = content
