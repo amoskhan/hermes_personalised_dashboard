@@ -25,6 +25,15 @@ type DreamingRec = {
   priority: 'high' | 'medium' | 'low'
 }
 
+type CalendarEvent = {
+  id: string
+  summary: string
+  start: string
+  end: string
+  location: string
+  isAllDay: boolean
+}
+
 type ModelInfo = {
   id: string
   name: string
@@ -44,6 +53,7 @@ export default function Dashboard() {
   const [vault, setVault] = useState<VaultStats | null>(null)
   const [dreaming, setDreaming] = useState<DreamingRec[]>([])
   const [models, setModels] = useState<ModelInfo[]>([])
+  const [calendar, setCalendar] = useState<{ date: string; events: CalendarEvent[] } | null>(null)
   const [graphData, setGraphData] = useState<any>({ nodes: [], links: [] })
   const [time, setTime] = useState(new Date())
   const [showOnboard, setShowOnboard] = useState(true)
@@ -53,6 +63,7 @@ export default function Dashboard() {
     fetch('/api/vault-stats').then(r => r.json()).then(setVault).catch(() => {})
     fetch('/api/dreaming').then(r => r.json()).then(setDreaming).catch(() => {})
     fetch('/api/models').then(r => r.json()).then(setModels).catch(() => {})
+    fetch('/api/calendar').then(r => r.json()).then(setCalendar).catch(() => {})
     fetch('/api/vault-graph').then(r => r.json()).then(setGraphData).catch(() => {})
     const t = setInterval(() => setTime(new Date()), 1000)
     const refresh = setInterval(() => {
@@ -330,6 +341,100 @@ export default function Dashboard() {
                   </span>
                 ))}
               </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ─── MIDDLE ROW: Today's Schedule ─── */}
+      <div style={{ marginBottom: 20 }}>
+        <div className="glass-card dashboard-card" style={{ background: 'linear-gradient(135deg, rgba(15,15,30,0.9) 0%, rgba(20,10,40,0.9) 100%)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+            <span style={{ fontSize: 22 }}>📅</span>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+                Today's Schedule
+              </h3>
+              <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+                {time.toLocaleDateString('en-SG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </p>
+            </div>
+            {calendar && calendar.events.length > 0 && (
+              <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)', background: 'rgba(99,102,241,0.1)', padding: '4px 10px', borderRadius: 20, border: '1px solid rgba(99,102,241,0.15)' }}>
+                {calendar.events.length} event{calendar.events.length > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+
+          {calendar && calendar.events.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {calendar.events.map((evt, i) => {
+                let timeLabel = ''
+                let timeColor = 'var(--accent-indigo)'
+                if (evt.isAllDay) {
+                  timeLabel = '🌅 All day'
+                  timeColor = 'var(--accent-emerald)'
+                } else if (evt.start) {
+                  const st = evt.start.split('T')[1]?.substring(0, 5)
+                  const en = evt.end?.split('T')[1]?.substring(0, 5)
+                  timeLabel = `${st} – ${en}`
+                  // Color code by time of day
+                  const hour = parseInt(evt.start.split('T')[1]?.substring(0, 2) || '0')
+                  if (hour >= 17) timeColor = '#f59e0b'  // evening - amber
+                  else if (hour >= 12) timeColor = '#6366f1'  // afternoon - indigo
+                  else timeColor = '#06b6d4'  // morning - cyan
+                }
+
+                // Determine event icon
+                let icon = '📌'
+                const summary = evt.summary?.toLowerCase() || ''
+                if (summary.includes('badminton') || summary.includes('coach')) icon = '🏸'
+                else if (summary.includes('cowork') || summary.includes('enterprise')) icon = '💼'
+                else if (summary.includes('teach') || summary.includes('lesson') || summary.includes('class') || summary.includes('mt')) icon = '📚'
+                else if (summary.includes('birthday') || summary.includes('party')) icon = '🎂'
+                else if (summary.includes('meet')) icon = '🤝'
+                else if (summary.includes('dental') || summary.includes('doctor') || summary.includes('med')) icon = '🩺'
+                else if (summary.includes('gym') || summary.includes('fit')) icon = '💪'
+                else if (summary.includes('nie') || summary.includes('qed') || summary.includes('module') || summary.includes('course')) icon = '🎓'
+
+                return (
+                  <div key={evt.id || i} style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '12px 14px',
+                    background: 'rgba(99,102,241,0.03)',
+                    border: '1px solid rgba(99,102,241,0.06)',
+                    borderRadius: 10,
+                    transition: 'all 0.2s'
+                  }}>
+                    <span style={{ fontSize: 20, flexShrink: 0 }}>{icon}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
+                        {evt.summary}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, color: timeColor, fontWeight: 500 }}>
+                          {timeLabel}
+                        </span>
+                        {evt.location && (
+                          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                            📍 {evt.location}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{
+                      width: 3, height: 36, borderRadius: 2, flexShrink: 0,
+                      background: timeColor, opacity: 0.6
+                    }} />
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="empty-state" style={{ padding: '20px 0' }}>
+              <div className="icon">📅</div>
+              <div className="text">{calendar ? 'No events today' : 'Loading schedule...'}</div>
+              <div className="sub">{calendar ? 'Enjoy your free day! 🎉' : 'Fetching from Google Calendar...'}</div>
             </div>
           )}
         </div>
