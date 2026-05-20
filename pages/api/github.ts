@@ -20,6 +20,18 @@ type Repo = {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Proxy to VPS if Python unavailable (Vercel)
+  const isVercel = !require('fs').existsSync('/home/ubuntu/visual-os/scripts/get-github-activity.py')
+  if (isVercel) {
+    try {
+      const proxyRes = await fetch('http://43.156.249.23:3002/api/github', { signal: AbortSignal.timeout(15000) })
+      const data = await proxyRes.json()
+      return res.json(data)
+    } catch {
+      return res.json({ repos: [], total_commits: 0 })
+    }
+  }
+
   try {
     const raw = execSync('python3 /home/ubuntu/visual-os/scripts/get-github-activity.py', {
       timeout: 30000,

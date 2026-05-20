@@ -1,6 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Proxy to VPS if OpenRouter key is missing (Vercel)
+  if (!process.env.OPENROUTER_API_KEY) {
+    try {
+      const proxyRes = await fetch('http://43.156.249.23:3002/api/usage', { signal: AbortSignal.timeout(8000) })
+      const data = await proxyRes.json()
+      return res.json(data)
+    } catch {
+      return res.json({ totalCost: 0, creditsRemaining: 0, model: 'deepseek-v4-flash', dailyUsage: [], isFreeTier: false })
+    }
+  }
+
   try {
     const key = process.env.OPENROUTER_API_KEY || ''
     let usageMonthly = 0

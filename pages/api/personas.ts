@@ -29,6 +29,36 @@ const PERSONA_EMOJIS: Record<string, string> = {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Proxy to VPS if Python unavailable (Vercel)
+  const isVercel = !require('fs').existsSync('/home/ubuntu/visual-os/scripts/get-personas.py')
+  if (isVercel) {
+    // GET: proxy to VPS
+    if (req.method === 'GET') {
+      try {
+        const proxyRes = await fetch('http://43.156.249.23:3002/api/personas', { signal: AbortSignal.timeout(8000) })
+        const data = await proxyRes.json()
+        return res.json(data)
+      } catch {
+        return res.json({ personas: [], active: 'kawaii', count: 0 })
+      }
+    }
+    // POST: proxy to VPS
+    if (req.method === 'POST') {
+      try {
+        const proxyRes = await fetch('http://43.156.249.23:3002/api/personas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(req.body),
+          signal: AbortSignal.timeout(8000)
+        })
+        const data = await proxyRes.json()
+        return res.json(data)
+      } catch {
+        return res.status(500).json({ error: 'Proxy failed' })
+      }
+    }
+  }
+
   // GET: return all personas + active one
   if (req.method === 'GET') {
     try {

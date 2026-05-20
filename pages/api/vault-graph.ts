@@ -3,8 +3,20 @@ import fs from 'fs'
 import pathModule from 'path'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Proxy to VPS if local data unavailable (Vercel)
+  const isVercel = !require('fs').existsSync('/home/ubuntu/ObsidianVault')
+  if (isVercel) {
+    try {
+      const proxyRes = await fetch('http://43.156.249.23:3002/api/vault-graph', { signal: AbortSignal.timeout(8000) })
+      const data = await proxyRes.json()
+      return res.json(data)
+    } catch {
+      return res.json({ nodes: [], links: [] })
+    }
+  }
+
   try {
-    const vaultPath = process.env.OBSIDIAN_VAULT_PATH || '/home/ubuntu/ObsidianVault'
+    const vaultPath = '/home/ubuntu/ObsidianVault'
     const notesDir = pathModule.join(vaultPath, 'Notes')
 
     if (!fs.existsSync(notesDir)) {

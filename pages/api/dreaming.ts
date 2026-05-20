@@ -4,6 +4,18 @@ import fs from 'fs'
 export const config = { runtime: 'nodejs' }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Proxy to VPS if local data unavailable (Vercel)
+  const isVercel = !require('fs').existsSync('/home/ubuntu/.hermes/dreaming')
+  if (isVercel) {
+    try {
+      const proxyRes = await fetch('http://43.156.249.23:3002/api/dreaming', { signal: AbortSignal.timeout(8000) })
+      const data = await proxyRes.json()
+      return res.json(data)
+    } catch {
+      return res.json([])
+    }
+  }
+
   const dreamingFile = '/home/ubuntu/.hermes/dreaming/latest.json'
   
   try {
