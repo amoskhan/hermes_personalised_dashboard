@@ -54,6 +54,7 @@ export default function Dashboard() {
   const [dreaming, setDreaming] = useState<DreamingRec[]>([])
   const [models, setModels] = useState<ModelInfo[]>([])
   const [calendar, setCalendar] = useState<{ date: string; events: CalendarEvent[] } | null>(null)
+  const [personas, setPersonas] = useState<{ personas: {id:string,name:string,description:string,emoji:string}[], active: string } | null>(null)
   const [graphData, setGraphData] = useState<any>({ nodes: [], links: [] })
   const [time, setTime] = useState(new Date())
   const [showOnboard, setShowOnboard] = useState(true)
@@ -64,6 +65,7 @@ export default function Dashboard() {
     fetch('/api/dreaming').then(r => r.json()).then(setDreaming).catch(() => {})
     fetch('/api/models').then(r => r.json()).then(setModels).catch(() => {})
     fetch('/api/calendar').then(r => r.json()).then(setCalendar).catch(() => {})
+    fetch('/api/personas').then(r => r.json()).then(setPersonas).catch(() => {})
     fetch('/api/vault-graph').then(r => r.json()).then(setGraphData).catch(() => {})
     const t = setInterval(() => setTime(new Date()), 1000)
     const refresh = setInterval(() => {
@@ -558,6 +560,87 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* ─── Persona Switcher ─── */}
+      {personas && personas.personas.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <div className="glass-card dashboard-card" style={{ background: 'linear-gradient(135deg, rgba(30,10,50,0.9) 0%, rgba(15,15,30,0.9) 100%)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <span style={{ fontSize: 22 }}>🎭</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Persona Switcher</h3>
+                <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+                  Currently active: <strong style={{ color: 'var(--accent-indigo)' }}>{personas.active.charAt(0).toUpperCase() + personas.active.slice(1)}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
+              {personas.personas.map((p) => {
+                const isActive = p.id === personas.active
+                return (
+                  <button
+                    key={p.id}
+                    onClick={async () => {
+                      try {
+                        const res = await fetch('/api/personas', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ persona: p.id })
+                        })
+                        if (res.ok) {
+                          // Refresh persona list
+                          fetch('/api/personas').then(r => r.json()).then(setPersonas).catch(() => {})
+                        }
+                      } catch {}
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                      border: isActive
+                        ? '1px solid rgba(99,102,241,0.4)'
+                        : '1px solid rgba(255,255,255,0.04)',
+                      background: isActive
+                        ? 'rgba(99,102,241,0.12)'
+                        : 'rgba(255,255,255,0.02)',
+                      color: isActive ? 'var(--accent-indigo)' : 'var(--text-secondary)',
+                      fontWeight: isActive ? 600 : 400,
+                      fontSize: 12,
+                      textAlign: 'left',
+                      transition: 'all 0.2s',
+                      fontFamily: 'inherit',
+                      width: '100%'
+                    }}
+                    onMouseEnter={e => {
+                      if (!isActive) {
+                        e.currentTarget.style.background = 'rgba(99,102,241,0.06)'
+                        e.currentTarget.style.borderColor = 'rgba(99,102,241,0.15)'
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!isActive) {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.02)'
+                        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.04)'
+                      }
+                    }}
+                  >
+                    <span style={{ fontSize: 18 }}>{p.emoji}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: isActive ? 600 : 400 }}>{p.name}</div>
+                      {p.description && (
+                        <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {p.description}
+                        </div>
+                      )}
+                    </div>
+                    {isActive && <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--accent-emerald)' }}>●</span>}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Models Quick Reference ─── */}
       {models.length > 0 && (
