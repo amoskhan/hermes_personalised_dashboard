@@ -67,19 +67,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .slice(0, 10)
   } catch {}
 
-  const summary = content
-    .replace(/---[\s\S]*?---\n?/, '')  // strip frontmatter
-    .replace(/^##\s+.*$/gm, '')        // strip headings
+  const fullContent = content
+    .replace(/---[\s\S]*?---\n?/, '')  // strip frontmatter only
     .replace(/\[\[([^\]]+)\]\]/g, '$1')  // unwikilink
-    .replace(/[#*_>`~-]{2,}/g, '')     // strip markdown formatting
-    .replace(/\n{3,}/g, '\n\n')
     .trim()
-    .slice(0, 400)
+
+  const summary = fullContent.slice(0, 3000)
 
   return res.json({
     name: cleanName,
     description,
-    summary: summary + (summary.length >= 400 ? '…' : ''),
+    summary: summary + (fullContent.length > 3000 ? '\n\n… (content continues)' : ''),
+    fullContent,
     tags,
     links,
     backlinks,

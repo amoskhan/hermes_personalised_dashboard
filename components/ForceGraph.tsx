@@ -9,6 +9,7 @@ interface NoteContent {
   name: string
   description: string
   summary: string
+  fullContent?: string
   tags: string[]
   links: string[]
   backlinks: string[]
@@ -24,17 +25,28 @@ const COLORS = [
 export default function ForceGraph({ data }: { data: GraphData }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const simulationRef = useRef<d3.Simulation<d3.SimulationNodeDatum, undefined> | null>(null)
+  const nodeRef = useRef<d3.Selection<SVGCircleElement, any, SVGGElement, unknown> | null>(null)
+  const linkRef = useRef<d3.Selection<SVGLineElement, any, SVGGElement, unknown> | null>(null)
+  const labelRef = useRef<d3.Selection<SVGTextElement, any, SVGGElement, unknown> | null>(null)
+  const gRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null)
+  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
+  const svgSelectionRef = useRef<d3.Selection<SVGSVGElement, unknown, null, undefined> | null>(null)
+
   const [search, setSearch] = useState('')
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string; links?: string } | null>(null)
   const [dimensions, setDimensions] = useState({ w: 600, h: 400 })
   const [minConnections, setMinConnections] = useState(0)
   const [focusedNode, setFocusedNode] = useState<string | null>(null)
   const [showNodeList, setShowNodeList] = useState(true)
-  const [hoveredNode, setHoveredNode] = useState<string | null>(null)
   const [selectedNote, setSelectedNote] = useState<string | null>(null)
   const [noteContent, setNoteContent] = useState<NoteContent | null>(null)
   const [loadingNote, setLoadingNote] = useState(false)
   const [noteError, setNoteError] = useState<string | null>(null)
+
+  // Store current interaction state in refs so D3 handlers can access latest values
+  const stateRef = useRef({ focusedNode: null as string | null, selectedNote: null as string | null, hoveredNode: null as string | null, search: '' })
+  stateRef.current = { focusedNode, selectedNote, hoveredNode: null, search }
 
   const connectionCounts = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -89,17 +101,15 @@ export default function ForceGraph({ data }: { data: GraphData }) {
       .sort((a, b) => (connectionCounts[b.id] || 0) - (connectionCounts[a.id] || 0))
   }, [filteredNodes, connectionCounts])
 
-  // Fetch note content when a note is selected
+  // Fetch note content
   useEffect(() => {
     if (!selectedNote) {
       setNoteContent(null)
       setNoteError(null)
       return
     }
-    // Check if it's an external ref
     const node = data.nodes.find(n => n.id === selectedNote)
     if (node && node.group === 2) {
-      // External ref — find which notes link to it
       const linkingNotes = data.links
         .filter(l => l.target === selectedNote || l.source === selectedNote)
         .map(l => l.source === selectedNote ? l.target : l.source)
@@ -107,10 +117,7 @@ export default function ForceGraph({ data }: { data: GraphData }) {
         name: selectedNote,
         description: '',
         summary: `🔗 External reference — not a note in your vault.\nReferenced by: ${linkingNotes.join(', ') || 'none'}`,
-        tags: [],
-        links: [],
-        backlinks: [],
-        totalLines: 0,
+        tags: [], links: [], backlinks: [], totalLines: 0,
       })
       setNoteError(null)
       setLoadingNote(false)
@@ -121,19 +128,12 @@ export default function ForceGraph({ data }: { data: GraphData }) {
     setNoteError(null)
     fetch(`/api/note-content?name=${encodeURIComponent(selectedNote)}`)
       .then(r => r.json())
-      .then(data => {
-        if (data.error) {
-          setNoteError(data.error)
-          setNoteContent(null)
-        } else {
-          setNoteContent(data)
-        }
+      .then(d => {
+        if (d.error) { setNoteError(d.error); setNoteContent(null) }
+        else { setNoteContent(d) }
         setLoadingNote(false)
       })
-      .catch(err => {
-        setNoteError('Failed to load note')
-        setLoadingNote(false)
-      })
+      .catch(() => { setNoteError('Failed to load note'); setLoadingNote(false) })
   }, [selectedNote, data])
 
   // Resize
@@ -160,39 +160,32 @@ export default function ForceGraph({ data }: { data: GraphData }) {
     return COLORS[Math.abs(hash) % COLORS.length]
   }
 
-  // Handle node click — set both focus and selected note
-  const handleNodeClick = useCallback((nodeId: string) => {
-    setSelectedNote(prev => prev === nodeId ? null : nodeId)
-  }, [])
-
-  // Main D3 render
+  // ────────────────── MAIN D3 RENDER ──────────────────
+  // Only runs when data/filter/search/dimensions change — NOT on click/hover
   useEffect(() => {
     if (!svgRef.current || !filteredNodes.length) return
 
     const { w, h } = dimensions
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
+    svgSelectionRef.current = svg
 
     const g = svg.append('g')
+    gRef.current = g
+
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.15, 5])
       .on('zoom', (event) => { g.attr('transform', event.transform) })
     svg.call(zoom)
     svg.call(zoom.transform, d3.zoomIdentity.translate(w / 2, h / 2).scale(0.7))
+    zoomRef.current = zoom
 
     const radius = (id: string) => {
       const c = connectionCounts[id] || 1
       return Math.max(4, Math.min(14, (c / maxConns) * 10 + 3))
     }
 
-    const searchLower = search.toLowerCase()
-    const isHighlighted = (id: string) => searchLower && id.toLowerCase().includes(searchLower)
-    const isDimmed = (id: string) => {
-      if (!focusedNode) return false
-      return !focusSet?.has(id)
-    }
-
-    const simulation = d3.forceSimulation(filteredNodes as any)
+    const sim = d3.forceSimulation(filteredNodes as any)
       .force('link', d3.forceLink<any, any>(filteredLinks)
         .id((d: any) => d.id)
         .distance(d => 40 + (d.count || 1) * 15))
@@ -200,7 +193,9 @@ export default function ForceGraph({ data }: { data: GraphData }) {
       .force('center', d3.forceCenter(0, 0))
       .force('collision', d3.forceCollide().radius(d => radius((d as any).id) + 5))
       .alphaDecay(0.02)
+    simulationRef.current = sim
 
+    // Links
     const link = g.append('g')
       .selectAll('line')
       .data(filteredLinks)
@@ -208,51 +203,37 @@ export default function ForceGraph({ data }: { data: GraphData }) {
       .attr('stroke', '#2a2a5e')
       .attr('stroke-width', d => Math.min(d.count, 3))
       .attr('stroke-opacity', d => 0.15 + d.count * 0.08)
-      .attr('opacity', d => {
-        if (!focusedNode) return 1
-        return (focusedNode === d.source || focusedNode === d.target) ? 1 : 0.1
-      })
+    linkRef.current = link as any
 
+    // Nodes
     const node = g.append('g')
       .selectAll('circle')
       .data(filteredNodes)
       .join('circle')
       .attr('r', d => radius(d.id))
       .attr('fill', d => nodeColor(d.id, d.group))
-      .attr('stroke', d => {
-        if (isHighlighted(d.id)) return '#fff'
-        if (d.id === selectedNote) return '#22c55e'
-        if (d.id === focusedNode) return '#818cf8'
-        if (focusedNode && !isDimmed(d.id)) return '#6366f1'
-        return d.group === 1 ? '#1a1a3e' : 'none'
-      })
-      .attr('stroke-width', d => {
-        if (isHighlighted(d.id) || d.id === selectedNote) return 2.5
-        if (d.id === focusedNode) return 2.5
-        if (focusedNode && !isDimmed(d.id)) return 2
-        return focusedNode ? 0.2 : 1
-      })
-      .attr('opacity', d => isDimmed(d.id) ? 0.15 : (isHighlighted(d.id) ? 1 : 0.85))
+      .attr('stroke', d => d.group === 1 ? '#1a1a3e' : 'none')
+      .attr('stroke-width', 1)
+      .attr('opacity', 0.85)
       .attr('cursor', 'pointer')
-      .style('filter', d => {
-        if (isHighlighted(d.id)) return 'drop-shadow(0 0 6px rgba(255,255,255,0.3))'
-        if (d.id === selectedNote) return 'drop-shadow(0 0 8px rgba(34,197,94,0.5))'
-        if (d.id === focusedNode) return 'drop-shadow(0 0 8px rgba(99,102,241,0.5))'
-        return 'none'
-      })
       .call(d3.drag<any, any>()
         .on('start', (event, d) => {
-          if (!event.active) simulation.alphaTarget(0.3).restart()
+          if (!event.active) sim.alphaTarget(0.3).restart()
           d.fx = d.x; d.fy = d.y
         })
         .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y })
         .on('end', (event, d) => {
-          if (!event.active) simulation.alphaTarget(0)
+          if (!event.active) sim.alphaTarget(0)
           d.fx = null; d.fy = null
         })
       )
       .on('mouseenter', (event: MouseEvent, d: any) => {
-        setHoveredNode(d.id)
+        const st = stateRef.current
+        // Update hovered node visually
+        d3.select(event.currentTarget as SVGCircleElement).attr('opacity', 1)
+        // Show label for this node
+        label.filter((ld: any) => ld.id === d.id).attr('opacity', 1)
+        // Tooltip
         const rect = svgRef.current!.getBoundingClientRect()
         const x = event.clientX - rect.left + 12
         const y = event.clientY - rect.top - 8
@@ -262,57 +243,86 @@ export default function ForceGraph({ data }: { data: GraphData }) {
           .map(l => shortId(l.source === d.id ? l.target : l.source))
           .slice(0, 8)
         setTooltip({
-          x: Math.min(x, rect.width - 250),
-          y,
+          x: Math.min(x, rect.width - 250), y,
           text: `${shortId(d.id)} · ${conns} connection${conns !== 1 ? 's' : ''} · Click to preview`,
           links: connectedNames.length ? connectedNames.join(', ') : undefined,
         })
       })
-      .on('mouseleave', () => { setHoveredNode(null); setTooltip(null) })
+      .on('mouseleave', (event: MouseEvent, d: any) => {
+        const st = stateRef.current
+        const dimmed = st.focusedNode && !(d.id === st.focusedNode || (
+          data.links.some(l =>
+            (l.source === st.focusedNode && l.target === d.id) ||
+            (l.target === st.focusedNode && l.source === d.id)
+          )
+        ))
+        d3.select(event.currentTarget as SVGCircleElement).attr('opacity', dimmed ? 0.15 : (d.id === st.selectedNote ? 1 : 0.85))
+        // Hide label unless focused/selected
+        if (d.id !== st.focusedNode && d.id !== st.selectedNote) {
+          label.filter((ld: any) => ld.id === d.id).attr('opacity', 0)
+        }
+        setTooltip(null)
+      })
       .on('click', (event: MouseEvent, d: any) => {
         event.stopPropagation()
-        handleNodeClick(d.id)
-        if (d.id === focusedNode) {
-          setFocusedNode(null)
+        setSelectedNote(prev => prev === d.id ? null : d.id)
+        setFocusedNode(prev => prev === d.id ? null : d.id)
+        // Zoom to node
+        const currentZoom = zoomRef.current
+        if (currentZoom && d.x != null && d.y != null) {
           svg.transition().duration(500).call(
-            zoom.transform,
-            d3.zoomIdentity.translate(w / 2, h / 2).scale(0.7)
-          )
-        } else {
-          setFocusedNode(d.id)
-          svg.transition().duration(600).call(
-            zoom.transform,
+            currentZoom.transform,
             d3.zoomIdentity.translate(w / 2 - d.x * 1.3, h / 2 - d.y * 1.3).scale(1.3)
           )
         }
       })
+    nodeRef.current = node as any
 
-    // Labels — only for hovered + focused + selected
+    // Labels — initially hidden, shown on hover/focus/select
     const label = g.append('g')
       .selectAll('text')
       .data(filteredNodes.filter(n => n.group === 1))
       .join('text')
       .text(d => shortId(d.id))
-      .attr('font-size', d => d.id === focusedNode || d.id === selectedNote ? 11 : 10)
-      .attr('fill', d => d.id === selectedNote ? '#22c55e' : (d.id === focusedNode ? '#f0f0f4' : '#cccce0'))
-      .attr('font-weight', d => d.id === focusedNode || d.id === selectedNote ? 600 : 500)
+      .attr('font-size', 10)
+      .attr('fill', '#cccce0')
+      .attr('font-weight', 500)
       .attr('dx', d => radius(d.id) + 5)
       .attr('dy', 4)
       .style('pointer-events', 'none')
       .style('text-shadow', '0 1px 4px rgba(0,0,0,0.8)')
-      .attr('opacity', d => hoveredNode === d.id || d.id === focusedNode || d.id === selectedNote ? 1 : 0)
-      .style('transition', 'opacity 0.15s')
+      .attr('opacity', 0)
+    labelRef.current = label as any
 
+    // Click background = clear selection
     svg.on('click', () => {
       setFocusedNode(null)
       setSelectedNote(null)
-      svg.transition().duration(500).call(
-        zoom.transform,
-        d3.zoomIdentity.translate(w / 2, h / 2).scale(0.7)
-      )
+      const currentZoom = zoomRef.current
+      if (currentZoom) {
+        svg.transition().duration(500).call(
+          currentZoom.transform,
+          d3.zoomIdentity.translate(w / 2, h / 2).scale(0.7)
+        )
+      }
     })
 
-    simulation.on('tick', () => {
+    // Search highlight zoom
+    const searchLower = search.toLowerCase()
+    if (searchLower) {
+      const match = filteredNodes.find(n => n.id.toLowerCase().includes(searchLower))
+      if (match) {
+        setTimeout(() => {
+          svg.transition().duration(750).call(
+            zoom.transform,
+            d3.zoomIdentity.translate(w / 2 - (match as any).x * 1.5, h / 2 - (match as any).y * 1.5).scale(1.5)
+          )
+        }, 600)
+      }
+    }
+
+    // Tick
+    sim.on('tick', () => {
       link
         .attr('x1', (d: any) => d.source.x)
         .attr('y1', (d: any) => d.source.y)
@@ -326,20 +336,72 @@ export default function ForceGraph({ data }: { data: GraphData }) {
         .attr('y', (d: any) => d.y)
     })
 
-    if (searchLower) {
-      const match = filteredNodes.find(n => n.id.toLowerCase().includes(searchLower))
-      if (match) {
-        setTimeout(() => {
-          svg.transition().duration(750).call(
-            zoom.transform,
-            d3.zoomIdentity.translate(w / 2 - (match as any).x * 1.5, h / 2 - (match as any).y * 1.5).scale(1.5)
-          )
-        }, 600)
+    return () => { sim.stop() }
+  }, [filteredNodes, filteredLinks, search, dimensions, minConnections])
+
+  // ────────────────── STYLE UPDATES ──────────────────
+  // This runs on focus/select changes but does NOT restart the simulation
+  useEffect(() => {
+    const node = nodeRef.current
+    const link = linkRef.current
+    const label = labelRef.current
+    const sim = simulationRef.current
+    if (!node || !link || !label) return
+
+    // Build focus set
+    const fs = new Set<string>()
+    if (focusedNode) {
+      fs.add(focusedNode)
+      for (const l of data.links) {
+        if (l.source === focusedNode) fs.add(l.target as string)
+        if (l.target === focusedNode) fs.add(l.source as string)
       }
     }
 
-    return () => { simulation.stop() }
-  }, [filteredNodes, filteredLinks, search, dimensions, minConnections, focusedNode, focusSet, hoveredNode, selectedNote])
+    node
+      .transition().duration(200)
+      .attr('stroke', (d: any) => {
+        if (d.id === selectedNote) return '#22c55e'
+        if (d.id === focusedNode) return '#818cf8'
+        if (focusedNode && fs.has(d.id)) return '#6366f1'
+        return d.group === 1 ? '#1a1a3e' : 'none'
+      })
+      .attr('stroke-width', (d: any) => {
+        if (d.id === selectedNote || d.id === focusedNode) return 2.5
+        if (focusedNode && fs.has(d.id)) return 2
+        return focusedNode ? 0.2 : 1
+      })
+      .attr('opacity', (d: any) => {
+        if (!focusedNode && !selectedNote) return 0.85
+        if (d.id === selectedNote || d.id === focusedNode) return 1
+        if (focusedNode && fs.has(d.id)) return 1
+        return 0.15
+      })
+      .style('filter', (d: any) => {
+        if (d.id === selectedNote) return 'drop-shadow(0 0 8px rgba(34,197,94,0.5))'
+        if (d.id === focusedNode) return 'drop-shadow(0 0 8px rgba(99,102,241,0.5))'
+        return 'none'
+      })
+
+    link
+      .transition().duration(200)
+      .attr('opacity', (d: any) => {
+        if (!focusedNode) return 1
+        const s = typeof d.source === 'object' ? d.source.id : d.source
+        const t = typeof d.target === 'object' ? d.target.id : d.target
+        return (s === focusedNode || t === focusedNode) ? 1 : 0.06
+      })
+
+    label
+      .attr('opacity', (d: any) => {
+        if (d.id === focusedNode || d.id === selectedNote) return 1
+        return 0
+      })
+      .attr('font-size', (d: any) => d.id === focusedNode || d.id === selectedNote ? 11 : 10)
+      .attr('fill', (d: any) => d.id === selectedNote ? '#22c55e' : (d.id === focusedNode ? '#f0f0f4' : '#cccce0'))
+      .attr('font-weight', (d: any) => d.id === focusedNode || d.id === selectedNote ? 600 : 500)
+
+  }, [focusedNode, selectedNote, data])
 
   const existingCount = filteredNodes.filter(n => n.group === 1).length
   const externalCount = filteredNodes.filter(n => n.group === 2).length
@@ -358,10 +420,7 @@ export default function ForceGraph({ data }: { data: GraphData }) {
     <div style={{ position: 'relative' }}>
       {/* Controls row */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input
-          type="text"
-          placeholder="🔍 Search notes..."
-          value={search}
+        <input type="text" placeholder="🔍 Search notes..." value={search}
           onChange={e => setSearch(e.target.value)}
           style={{
             flex: 1, minWidth: 120, padding: '6px 10px', fontSize: 12,
@@ -369,15 +428,13 @@ export default function ForceGraph({ data }: { data: GraphData }) {
             borderRadius: 6, color: '#ccc', outline: 'none',
           }}
           onFocus={e => e.target.style.borderColor = 'rgba(99,102,241,0.3)'}
-          onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.06)'}
-        />
+          onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.06)'} />
         {search && (
-          <button onClick={() => setSearch('')}
-            style={{
-              padding: '4px 10px', fontSize: 12,
-              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)',
-              borderRadius: 6, color: '#888', cursor: 'pointer'
-            }}>✕</button>
+          <button onClick={() => setSearch('')} style={{
+            padding: '4px 10px', fontSize: 12,
+            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: 6, color: '#888', cursor: 'pointer'
+          }}>✕</button>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: '#8888aa' }}>
           <span>Min links</span>
@@ -401,13 +458,11 @@ export default function ForceGraph({ data }: { data: GraphData }) {
               padding: '4px 10px', fontSize: 11,
               background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.2)',
               borderRadius: 6, color: '#818cf8', cursor: 'pointer'
-            }}>
-            ✕ Clear
-          </button>
+            }}>✕ Clear</button>
         )}
       </div>
 
-      {/* Graph + Preview side by side */}
+      {/* Graph + Preview */}
       <div style={{ display: 'flex', gap: 12 }}>
         {/* Graph */}
         <div ref={containerRef} style={{
@@ -429,18 +484,16 @@ export default function ForceGraph({ data }: { data: GraphData }) {
                 {tooltip.text}
               </div>
               {tooltip.links && (
-                <div style={{ fontSize: 10, color: '#8888aa', lineHeight: 1.5 }}>
-                  → {tooltip.links}
-                </div>
+                <div style={{ fontSize: 10, color: '#8888aa', lineHeight: 1.5 }}>→ {tooltip.links}</div>
               )}
             </div>
           )}
         </div>
 
-        {/* Note Preview Panel */}
+        {/* Note Preview Panel (slides in on click) */}
         {selectedNote && (
           <div style={{
-            flex: '0 0 35%', maxHeight: dimensions.h + 40, overflowY: 'auto',
+            flex: '0 0 35%', maxHeight: 500, overflowY: 'auto',
             borderRadius: 8, border: '1px solid rgba(34,197,94,0.15)',
             background: 'rgba(0,0,0,0.2)', padding: '12px',
           }}>
@@ -450,7 +503,6 @@ export default function ForceGraph({ data }: { data: GraphData }) {
               <div style={{ color: '#ef4444', fontSize: 12 }}>⚠️ {noteError}</div>
             ) : noteContent && (
               <>
-                {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#22c55e', marginBottom: 2 }}>
@@ -458,19 +510,16 @@ export default function ForceGraph({ data }: { data: GraphData }) {
                     </div>
                     <div style={{ fontSize: 10, color: '#666', display: 'flex', gap: 8 }}>
                       <span>{noteContent.totalLines} lines</span>
-                      {noteContent.backlinks.length > 0 && (
-                        <span>{noteContent.backlinks.length} backlink{noteContent.backlinks.length !== 1 ? 's' : ''}</span>
-                      )}
+                      {noteContent.backlinks.length > 0 && <span>{noteContent.backlinks.length} backlink{noteContent.backlinks.length !== 1 ? 's' : ''}</span>}
                     </div>
                   </div>
-                  <button onClick={() => setSelectedNote(null)}
+                  <button onClick={() => { setSelectedNote(null); setFocusedNode(null) }}
                     style={{
                       background: 'rgba(255,255,255,0.04)', border: 'none',
                       color: '#666', cursor: 'pointer', fontSize: 14, padding: '2px 6px', borderRadius: 4
                     }}>✕</button>
                 </div>
 
-                {/* Tags */}
                 {noteContent.tags.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 10 }}>
                     {noteContent.tags.map((t, i) => (
@@ -494,9 +543,14 @@ export default function ForceGraph({ data }: { data: GraphData }) {
                   </div>
                 )}
 
-                {/* Summary */}
+                {/* Full summary/content */}
                 {noteContent.summary && (
-                  <div style={{ fontSize: 11, color: '#cccce0', lineHeight: 1.6, marginBottom: 12, whiteSpace: 'pre-wrap' }}>
+                  <div style={{
+                    fontSize: 11, color: '#cccce0', lineHeight: 1.6, marginBottom: 12,
+                    whiteSpace: 'pre-wrap', fontFamily: "'JetBrains Mono', monospace",
+                    background: 'rgba(0,0,0,0.15)', borderRadius: 6, padding: '10px',
+                    maxHeight: 300, overflowY: 'auto',
+                  }}>
                     {noteContent.summary}
                   </div>
                 )}
@@ -508,14 +562,12 @@ export default function ForceGraph({ data }: { data: GraphData }) {
                       🔗 Links to ({noteContent.links.length})
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {noteContent.links.slice(0, 12).map((link, i) => (
+                      {noteContent.links.slice(0, 16).map((link, i) => (
                         <span key={i} style={{
                           fontSize: 10, padding: '2px 7px',
                           background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.08)',
                           borderRadius: 4, color: '#06b6d4', cursor: 'pointer',
-                        }}
-                          onClick={() => setSelectedNote(link)}
-                        >
+                        }} onClick={() => setSelectedNote(link)}>
                           {shortId(link)}
                         </span>
                       ))}
@@ -530,14 +582,12 @@ export default function ForceGraph({ data }: { data: GraphData }) {
                       ↩️ Linked from ({noteContent.backlinks.length})
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {noteContent.backlinks.slice(0, 12).map((bl, i) => (
+                      {noteContent.backlinks.slice(0, 16).map((bl, i) => (
                         <span key={i} style={{
                           fontSize: 10, padding: '2px 7px',
                           background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.08)',
                           borderRadius: 4, color: '#f59e0b', cursor: 'pointer',
-                        }}
-                          onClick={() => setSelectedNote(bl)}
-                        >
+                        }} onClick={() => setSelectedNote(bl)}>
                           {shortId(bl)}
                         </span>
                       ))}
@@ -546,16 +596,14 @@ export default function ForceGraph({ data }: { data: GraphData }) {
                 )}
 
                 {!noteContent.links.length && !noteContent.backlinks.length && !noteContent.summary && !noteContent.description && (
-                  <div style={{ color: '#666', fontSize: 11, fontStyle: 'italic' }}>
-                    Empty note — nothing to preview
-                  </div>
+                  <div style={{ color: '#666', fontSize: 11, fontStyle: 'italic' }}>Empty note</div>
                 )}
               </>
             )}
           </div>
         )}
 
-        {/* Node list (only when preview is closed) */}
+        {/* Node list (only when no preview open) */}
         {!selectedNote && showNodeList && sortedNodes.length > 0 && (
           <div style={{
             flex: '0 0 35%', maxHeight: dimensions.h, overflowY: 'auto',
@@ -567,28 +615,21 @@ export default function ForceGraph({ data }: { data: GraphData }) {
             </div>
             {sortedNodes.map(n => {
               const conns = connectionCounts[n.id] || 0
-              const isActive = focusedNode === n.id
+              const isActive = selectedNote === n.id
               return (
                 <div key={n.id}
-                  onClick={() => handleNodeClick(n.id)}
+                  onClick={() => { setSelectedNote(n.id); setFocusedNode(n.id) }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6,
                     padding: '4px 8px', borderRadius: 4, cursor: 'pointer',
                     fontSize: 11, marginBottom: 2,
-                    background: isActive ? 'rgba(99,102,241,0.1)' : 'transparent',
-                    color: isActive ? '#818cf8' : '#aaa',
-                    border: `1px solid ${isActive ? 'rgba(99,102,241,0.15)' : 'transparent'}`,
-                  }}
-                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
-                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
-                >
+                    background: isActive ? 'rgba(34,197,94,0.08)' : 'transparent',
+                    color: isActive ? '#22c55e' : '#aaa',
+                    border: `1px solid ${isActive ? 'rgba(34,197,94,0.15)' : 'transparent'}`,
+                  }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: nodeColor(n.id, n.group), flexShrink: 0 }} />
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {shortId(n.id)}
-                  </span>
-                  <span style={{ fontSize: 9, color: '#666', flexShrink: 0 }}>
-                    {conns} link{conns !== 1 ? 's' : ''}
-                  </span>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shortId(n.id)}</span>
+                  <span style={{ fontSize: 9, color: '#666', flexShrink: 0 }}>{conns} link{conns !== 1 ? 's' : ''}</span>
                 </div>
               )
             })}
@@ -611,15 +652,8 @@ export default function ForceGraph({ data }: { data: GraphData }) {
             {externalCount} refs
           </span>
           <span style={{ color: '#666688' }}>🔗 {filteredLinks.length} connections</span>
-          {focusedNode && (
-            <span style={{ color: '#818cf8' }}>
-              ✦ Focusing: {shortId(focusedNode)}
-            </span>
-          )}
           {selectedNote && noteContent && (
-            <span style={{ color: '#22c55e' }}>
-              📖 Previewing: {shortId(selectedNote)}
-            </span>
+            <span style={{ color: '#22c55e' }}>📖 Previewing: {shortId(selectedNote)}</span>
           )}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -628,8 +662,7 @@ export default function ForceGraph({ data }: { data: GraphData }) {
               padding: '3px 10px', fontSize: 10,
               background: showNodeList ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.03)',
               border: `1px solid ${showNodeList ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.06)'}`,
-              borderRadius: 4, color: showNodeList ? '#818cf8' : '#666',
-              cursor: 'pointer'
+              borderRadius: 4, color: showNodeList ? '#818cf8' : '#666', cursor: 'pointer'
             }}>
             {showNodeList ? 'Hide list' : 'Show list'}
           </button>
