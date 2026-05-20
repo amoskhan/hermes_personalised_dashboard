@@ -17,7 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // On Vercel: proxy to VPS
-    const proxyRes = await fetch('http://43.156.249.23:3002/api/daily-summary', {
+    const proxyRes = await fetch('http://43.156.249.23:3001/api/daily-summary', {
       signal: AbortSignal.timeout(8000)
     })
     const data = await proxyRes.json()

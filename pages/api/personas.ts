@@ -35,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // GET: proxy to VPS
     if (req.method === 'GET') {
       try {
-        const proxyRes = await fetch('http://43.156.249.23:3002/api/personas', { signal: AbortSignal.timeout(8000) })
+        const proxyRes = await fetch('http://43.156.249.23:3001/api/personas', { signal: AbortSignal.timeout(8000) })
         const data = await proxyRes.json()
         return res.json(data)
       } catch {
@@ -45,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // POST: proxy to VPS
     if (req.method === 'POST') {
       try {
-        const proxyRes = await fetch('http://43.156.249.23:3002/api/personas', {
+        const proxyRes = await fetch('http://43.156.249.23:3001/api/personas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(req.body),

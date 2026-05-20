@@ -7,7 +7,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Proxy to VPS if running on Vercel (ephemeral filesystem)
   if (process.env.VERCEL) {
     try {
-      const proxyRes = await fetch('http://43.156.249.23:3002/api/dreaming', { signal: AbortSignal.timeout(8000) })
+      const proxyRes = await fetch('http://43.156.249.23:3001/api/dreaming', { signal: AbortSignal.timeout(8000) })
       const data = await proxyRes.json()
       return res.json(data)
     } catch {
