@@ -25,11 +25,35 @@ const MODEL_PRICING: Record<string, { prompt: number; completion: number }> = {
 }
 
 function getCurrentModel(): string {
+  // Priority 1: Scan agent.log for the most recently used model
+  try {
+    if (fs.existsSync(AGENT_LOG)) {
+      const logContent = fs.readFileSync(AGENT_LOG, 'utf-8')
+      const lines = logContent.split('\n').filter(l => l.trim())
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i]
+        // Look for model= in API call lines (most accurate)
+        const apiModel = line.match(/model=([\w./-]+(?::\w+)?)/)
+        if (apiModel && apiModel[1] !== 'openai/gpt-oss-120b:free') return apiModel[1]
+        const auxModel = line.match(/using openrouter \((\S+)\)/)
+        if (auxModel) return auxModel[1]
+      }
+      // If all recent models were free, still return the last one
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i]
+        const apiModel = line.match(/model=([\w./-]+(?::\w+)?)/)
+        if (apiModel) return apiModel[1]
+      }
+    }
+  } catch {}
+
+  // Priority 2: Read from config.yaml
   try {
     const content = fs.readFileSync(CONFIG_PATH, 'utf-8')
     const match = content.match(/^model:\s*(\S+)/m)
     if (match) return match[1]
   } catch {}
+
   return 'unknown'
 }
 
@@ -269,6 +293,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
   }
 
+  // Build per-model daily usage (last 7 days)
+  // Each day's tokens/cost is split between models by pricing-weighted call proportion
+  const perModelDaily: Record<string, { date: string; calls: number; tokens: number; cost: number }[]> = {}
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(d.getDate() - i)
+    const dateStr = d.toISOString().slice(0, 10)
+    const dayLabel = d.toLocaleDateString('en-SG', { weekday: 'short' })
+
+    // Find this day's data from parsed logs
+    const dayData = days.find(dd => dd.date === dateStr)
+    if (!dayData || dayData.models.length === 0) continue
+
+    // Compute pricing weight for each model this day
+    let totalDayWeight = 0
+    const modelDayWeights: Record<string, number> = {}
+    for (const m of dayData.models) {
+      const pricing = isFreeModel(m.model) ? { prompt: 0, completion: 0 } : getPricing(m.model)
+      const weight = m.calls * ((pricing.prompt + pricing.completion) / 2 / 1_000_000 * 1000)
+      modelDayWeights[m.model] = weight
+      totalDayWeight += weight
+    }
+
+    const dayTotal = dailyCost[dateStr]
+    const dayTokens = dayTotal ? dayTotal.tokens : 0
+    const dayCost = dayTotal ? dayTotal.cost : 0
+
+    for (const m of dayData.models) {
+      if (!perModelDaily[m.model]) perModelDaily[m.model] = []
+      const share = totalDayWeight > 0 ? (modelDayWeights[m.model] / totalDayWeight) : (1 / dayData.models.length)
+      perModelDaily[m.model].push({
+        date: dayLabel,
+        calls: m.calls,
+        tokens: Math.round(dayTokens * share),
+        cost: Number((dayCost * share).toFixed(4)),
+      })
+    }
+  }
+
   // Calculate max tokens for chart scaling
   const maxTokens = Math.max(...last7.map(d => d.tokens), 1)
 
@@ -331,5 +394,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Raw totals for reference
     totalCallsAllModels: Object.values(modelsSummary).reduce((a: number, b: number) => a + b, 0),
+
+    // Per-model daily breakdown (for model selector)
+    perModelDaily,
   })
 }

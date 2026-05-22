@@ -11,6 +11,8 @@ type UsageData = {
   creditsRemaining: number
   model: string
   dailyUsage: { date: string; cost: number; tokens: number }[]
+  models: { model: string; calls: number; cost: number; free?: boolean }[]
+  perModelDaily: Record<string, { date: string; calls: number; tokens: number; cost: number }[]>
 }
 
 type VaultStats = {
@@ -77,6 +79,8 @@ export default function Dashboard() {
   const [github, setGithub] = useState<{ repos: any[], total_commits: number } | null>(null)
   const [graphData, setGraphData] = useState<any>({ nodes: [], links: [] })
   const [dailySummary, setDailySummary] = useState<DailySummary | null>(null)
+  const [badmintonEvents, setBadmintonEvents] = useState<any[]>([])
+  const [badmintonStatus, setBadmintonStatus] = useState<any>(null)
   const [time, setTime] = useState(new Date())
   const [showOnboard, setShowOnboard] = useState(true)
 
@@ -90,6 +94,10 @@ export default function Dashboard() {
     fetch('/api/github').then(r => r.json()).then(setGithub).catch(() => {})
     fetch('/api/vault-graph').then(r => r.json()).then(setGraphData).catch(() => {})
     fetch('/api/daily-summary').then(r => r.json()).then(setDailySummary).catch(() => {})
+    fetch('/api/badminton').then(r => r.json()).then(data => {
+      if (data.upcoming) setBadmintonEvents(data.upcoming)
+      if (data.weekTraining) setBadmintonStatus(data)
+    }).catch(() => {})
     const t = setInterval(() => setTime(new Date()), 1000)
     const refresh = setInterval(() => {
       fetch('/api/usage').then(r => r.json()).then(setUsage).catch(() => {})
@@ -104,11 +112,18 @@ export default function Dashboard() {
   const monthlyValue = hoursSaved * hourlyRate * 4.33
   const netRoi = monthlyValue - subsTotal
 
-  // Mini bar data
-  const maxToken = Math.max(...(usage?.dailyUsage.map(d => d.tokens) || [1]), 1)
-
   const modelTag = usage?.model || 'Loading...'
   const isFree = usage?.totalCost === 0
+  const [selectedModel, setSelectedModel] = useState<string | null>(null)
+
+  // Chart data: show selected model's data or all models combined
+  const chartData = selectedModel && usage?.perModelDaily?.[selectedModel]
+    ? usage.perModelDaily[selectedModel]
+    : usage?.dailyUsage || []
+  const chartLabel = selectedModel || 'All Models'
+
+  // Mini bar data
+  const maxToken = Math.max(...(chartData.map(d => d.tokens) || [1]), 1)
 
   return (
     <div style={{ padding: '20px 28px', maxWidth: 1280, margin: '0 auto', position: 'relative', zIndex: 1 }}>
@@ -395,8 +410,31 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* Model selector */}
+          {usage?.models && usage.models.length > 1 && (
+            <div style={{ marginTop: 14, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Show:</span>
+              <select
+                value={selectedModel || ''}
+                onChange={e => setSelectedModel(e.target.value || null)}
+                style={{
+                  flex: 1, padding: '5px 8px', fontSize: 11,
+                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 6, color: '#ccc', outline: 'none', cursor: 'pointer',
+                  fontFamily: 'inherit'
+                }}
+              >
+                <option value="">All Models</option>
+                {usage.models.filter(m => m.calls > 0).map((m: any) => (
+                  <option key={m.model} value={m.model}>{m.model} ({m.calls.toLocaleString()} calls)</option>
+                ))}
+              </select>
+              <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>{chartLabel}</span>
+            </div>
+          )}
+
           {/* Mini bar chart - token usage */}
-          {usage?.dailyUsage && usage.dailyUsage.length > 0 && (
+          {chartData.length > 0 && (
             <div style={{ marginTop: 18 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>7-Day Token Activity</span>
@@ -405,9 +443,9 @@ export default function Dashboard() {
                 </span>
               </div>
               <div className="mini-bar-wrap">
-                {usage.dailyUsage.map((d, i) => {
+                {chartData.map((d: any, i: number) => {
                   const h = Math.max(4, (d.tokens / maxToken) * 38)
-                  const isToday = i === usage.dailyUsage.length - 1
+                  const isToday = i === chartData.length - 1
                   const color = isToday
                     ? 'var(--accent-indigo)'
                     : d.tokens > maxToken * 0.7
@@ -423,7 +461,7 @@ export default function Dashboard() {
                 })}
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-muted)', marginTop: 4 }}>
-                {usage.dailyUsage.map((d, i) => (
+                {chartData.map((d: any, i: number) => (
                   <span key={i} style={{ opacity: i % 2 === 0 ? 1 : 0.4 }}>{d.date}</span>
                 ))}
               </div>
@@ -431,10 +469,10 @@ export default function Dashboard() {
           )}
 
           {/* Recharts area chart */}
-          {usage?.dailyUsage && usage.dailyUsage.length > 1 && (
+          {chartData.length > 1 && (
             <div style={{ marginTop: 16, height: 110 }}>
               <ResponsiveContainer width="100%" height={100}>
-                <AreaChart data={usage.dailyUsage}>
+                 <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="colorTokens" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25}/>
@@ -461,6 +499,54 @@ export default function Dashboard() {
                   />
                 </AreaChart>
               </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Model breakdown */}
+          {usage?.models && usage.models.length > 0 && (
+            <div style={{ marginTop: 18, borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>All Models (this month)</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                  {usage.models.reduce((a: number, m: any) => a + m.calls, 0)} total calls
+                </span>
+              </div>
+              {usage.models.map((m: any, i: number) => {
+                const isActive = m.model === modelTag
+                return (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '5px 8px', borderRadius: 6,
+                    background: isActive ? 'rgba(99,102,241,0.08)' : 'transparent',
+                    fontSize: 11, marginBottom: 3
+                  }}>
+                    <div style={{
+                      width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                      background: m.free ? 'var(--accent-emerald)' :
+                        m.cost > 5 ? '#f59e0b' : '#6366f1'
+                    }} />
+                    <span style={{
+                      flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      color: isActive ? 'var(--accent-indigo)' : 'var(--text-secondary)',
+                      fontWeight: isActive ? 600 : 400
+                    }}>
+                      {m.model}
+                    </span>
+                    {m.free && <span style={{ fontSize: 9, color: 'var(--accent-emerald)' }}>FREE</span>}
+                    <span style={{ fontSize: 9, color: 'var(--text-muted)', flexShrink: 0 }}>
+                      {m.calls.toLocaleString()} calls
+                    </span>
+                    {m.cost > 0 && (
+                      <span style={{
+                        fontSize: 9, fontWeight: 600, flexShrink: 0,
+                        color: m.cost > 5 ? 'var(--accent-amber)' : 'var(--text-secondary)'
+                      }}>
+                        S${m.cost.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -537,6 +623,19 @@ export default function Dashboard() {
               </div>
             </div>
           )}
+
+          {/* Friction balance insight — Mete Polat */}
+          <div style={{
+            marginTop: 14, padding: '8px 12px', borderRadius: 8,
+            background: 'rgba(99,102,241,0.03)', border: '1px solid rgba(99,102,241,0.06)',
+            fontSize: 10, color: '#8888aa', lineHeight: 1.5
+          }}>
+            <span style={{ fontWeight: 600, color: 'var(--accent-indigo)' }}>⚖️ Friction Balance:</span>{' '}
+            Obsidian + local files = lower agent friction. Direct file writes beat MCP APIs.
+            <span style={{ display: 'block', fontSize: 9, color: 'var(--text-muted)', marginTop: 2 }}>
+              — From [[mete-polat]]'s Hermes setup guide
+            </span>
+          </div>
         </div>
       </div>
 
@@ -634,7 +733,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ─── BOTTOM ROW: Dreaming + ROI ─── */}
+      {/* ─── BOTTOM ROW: Dreaming + Badminton Training ─── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
         {/* Dreaming Engine */}
@@ -689,67 +788,98 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ROI Tracker */}
-        <div className="glass-card emerald dashboard-card">
+        {/* Badminton Training — inspired by Mete Polat's fitness coach */}
+        <div className="glass-card dashboard-card" style={{ background: 'linear-gradient(135deg, rgba(30,15,40,0.9) 0%, rgba(15,15,30,0.9) 100%)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-            <span style={{ fontSize: 22 }}>📊</span>
+            <span style={{ fontSize: 22 }}>🏸</span>
             <div>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>ROI Tracker</h3>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Badminton Training</h3>
               <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
-                Time & value saved with AI workflows
+                Weekly training & competition prep
               </p>
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="stat-tile">
-              <div className="label">Time Saved (est.)</div>
-              <div className="value small" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                ~{hoursSaved}h/week
-                <span style={{ fontSize: 10, color: 'var(--accent-emerald)', fontWeight: 400 }}>+20% vs last month</span>
+              <div className="label">This Week's Focus</div>
+              <div className="value small" style={{ color: 'var(--accent-indigo)' }}>
+                Pre-competition
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                Light plyos, footwork, match play
               </div>
             </div>
             <div className="stat-tile">
-              <div className="label">Hourly Rate</div>
-              <div className="value small">S${hourlyRate}</div>
-            </div>
-            <div className="stat-tile">
-              <div className="label">Monthly Value</div>
-              <div className="value green">S${monthlyValue.toFixed(0)}</div>
-            </div>
-            <div className="stat-tile">
-              <div className="label">Subscriptions</div>
-              <div className="value small rose">-S${subsTotal}</div>
+              <div className="label">Sessions This Week</div>
+              <div className="value small" style={{ color: 'var(--accent-cyan)' }}>{badmintonEvents.length} sessions</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                {badmintonEvents.length > 0 ? `${badmintonEvents[0].summary} tonight` : 'No sessions this week'}
+              </div>
             </div>
           </div>
 
-          <div className="roi-glow" style={{ marginTop: 18 }}>
-            <div style={{ position: 'relative', zIndex: 1 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Net Monthly ROI</div>
-              <div style={{
-                fontSize: 34, fontWeight: 800,
-                color: netRoi >= 0 ? 'var(--accent-emerald)' : 'var(--accent-rose)',
-                fontFamily: "'JetBrains Mono', monospace",
-                letterSpacing: '-0.03em'
-              }}>
-                {netRoi >= 0 ? '+' : ''}S${netRoi.toFixed(0)}
+          {/* Competition countdown */}
+          <div style={{
+            marginTop: 14, padding: '12px 14px', borderRadius: 10,
+            background: 'linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(239,68,68,0.05) 100%)',
+            border: '1px solid rgba(245,158,11,0.15)',
+            display: 'flex', alignItems: 'center', gap: 12
+          }}>
+            <span style={{ fontSize: 28 }}>🏆</span>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent-amber)' }}>
+                Competition Countdown
               </div>
-              <div style={{
-                width: '100%', height: 4, marginTop: 10,
-                background: 'rgba(255,255,255,0.04)', borderRadius: 2,
-                position: 'relative', overflow: 'hidden'
-              }}>
-                <div style={{
-                  width: `${Math.min(100, (netRoi / 1500) * 100)}%`, height: '100%',
-                  background: 'linear-gradient(90deg, var(--accent-indigo), var(--accent-emerald))',
-                  borderRadius: 2, transition: 'width 1s ease'
-                }} />
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8 }}>
-                Based on ~{hoursSaved}h/week saved at S${hourlyRate}/h (MOE GEO2 rate)
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                Sunday 24 May • Rest & sharpen this week
               </div>
             </div>
+            <span style={{
+              marginLeft: 'auto', fontSize: 10, fontWeight: 600,
+              padding: '4px 10px', borderRadius: 20,
+              background: 'rgba(245,158,11,0.15)',
+              color: 'var(--accent-amber)',
+              border: '1px solid rgba(245,158,11,0.2)'
+            }}>
+              D-2
+            </span>
           </div>
+
+          {/* Quick tips */}
+          <div style={{
+            marginTop: 14, padding: '10px 14px', borderRadius: 8,
+            background: 'rgba(99,102,241,0.03)', border: '1px solid rgba(99,102,241,0.06)',
+            fontSize: 11, color: '#aaaacc', lineHeight: 1.5
+          }}>
+            <span style={{ fontWeight: 600, color: 'var(--accent-indigo)' }}>💡 Tip:</span>{' '}
+            After each session, send me a quick voice note — I'll log your progress, track recovery, and adjust your prep plan.
+          </div>
+
+          {/* Upcoming sessions */}
+          {badmintonEvents.length > 0 && (
+            <div style={{ marginTop: 14, padding: '10px 0 0', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+                📅 Upcoming Sessions
+              </div>
+              {badmintonEvents.slice(0, 4).map((evt: any, i: number) => {
+                const dateStr = evt.start?.split('T')[0] || ''
+                const timeStr = evt.start?.split('T')[1]?.substring(0, 5) || ''
+                return (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '6px 8px', borderRadius: 6,
+                    background: 'rgba(255,255,255,0.01)',
+                    marginBottom: 4, fontSize: 11
+                  }}>
+                    <span style={{ fontSize: 16 }}>🏸</span>
+                    <span style={{ flex: 1, color: 'var(--text-secondary)' }}>{evt.summary}</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{dateStr} {timeStr}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 
