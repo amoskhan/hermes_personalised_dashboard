@@ -1,15 +1,15 @@
 import { useState } from 'react'
 
 const NODES = [
-  { id: 'you',       x: 40,  y: 40,  w: 160, h: 50,  label: 'You',          icon: '👤', color: '#22c55e', bg: '#064e3b', desc: 'You interact with Hermes via Telegram. Send voice notes, text, or requests — Hermes responds with full context from past conversations.' },
-  { id: 'telegram',  x: 40,  y: 120, w: 160, h: 50,  label: 'Telegram',     icon: '💬', color: '#818cf8', bg: '#1e1b4b', desc: 'Your messaging platform. Messages are routed to Hermes Agent for AI processing. Supports voice notes, images, and links.' },
-  { id: 'hermes',    x: 270, y: 50,  w: 200, h: 100,  label: 'Hermes Agent', icon: '🧠', color: '#a78bfa', bg: '#2e1065', desc: 'The AI brain — powered by your active model. Decides which tools to call, reads/writes memory, and responds intelligently to your requests.' },
-  { id: 'cron',      x: 270, y: 220, w: 200, h: 50,  label: 'Cron Jobs',    icon: '⏰', color: '#67e8f9', bg: '#083344', desc: 'Background automations: Daily Standup Briefing (7am), Vault Pipeline (7:10am), Dreaming Engine (6am), Weekly Synthesis (Sunday).' },
-  { id: 'skills',    x: 540, y: 30,  w: 200, h: 80,  label: 'Skills & Tools', icon: '🔧', color: '#fbbf24', bg: '#451a03', desc: 'Calendar, GitHub, Research, Memory, Files, Terminal, Maps, Spotify, YouTube, and 20+ more tools — each a specialized capability.' },
-  { id: 'vault',     x: 540, y: 130, w: 200, h: 50,  label: 'Obsidian Vault', icon: '📓', color: '#c084fc', bg: '#3b0764', desc: 'Your knowledge base — 95+ notes in flat Karpathy-style structure. Daily notes, wiki entities, research, lesson plans.' },
-  { id: 'kb',        x: 540, y: 200, w: 200, h: 50,  label: 'Knowledge Base', icon: '💾', color: '#f472b6', bg: '#4c0519', desc: 'Persistent memory across sessions. Stores your profile, environment facts, preferences, and project conventions.' },
-  { id: 'dashboard', x: 540, y: 270, w: 200, h: 50,  label: 'Dashboard',    icon: '📊', color: '#2dd4bf', bg: '#134e4a', desc: 'Visual OS — model usage, vault graph, calendar, badminton training, live messages, dreaming engine suggestions.' },
-  { id: 'vps',       x: 40,  y: 350, w: 700, h: 50,  label: 'VPS Server',   icon: '🖥️', color: '#94a3b8', bg: '#1e293b', desc: 'Your server at 43.156.249.23. Runs Hermes, the dashboard (port 3001), cron jobs, and git sync for the Obsidian vault.' },
+  { id: 'you',       x: 45,  y: 50,  w: 140, h: 45,  label: 'You',          icon: '👤', color: '#4ade80', bg: '#0f472a', desc: 'You interact with Hermes via Telegram. Send voice notes, text, or requests — Hermes responds with full context from past conversations.' },
+  { id: 'telegram',  x: 45,  y: 115, w: 140, h: 45,  label: 'Telegram',     icon: '💬', color: '#60a5fa', bg: '#1e3a8a', desc: 'Your messaging platform. Messages are routed to Hermes Agent for AI processing. Supports voice notes, images, and links.' },
+  { id: 'hermes',    x: 275, y: 60,  w: 170, h: 85,  label: 'Hermes Agent', icon: '🧠', color: '#c084fc', bg: '#3f1e5e', desc: 'The AI brain — powered by your active model. Decides which tools to call, reads/writes memory, and responds intelligently to your requests.' },
+  { id: 'cron',      x: 275, y: 185, w: 170, h: 45,  label: 'Cron Jobs',    icon: '⏰', color: '#22d3ee', bg: '#0e4849', desc: 'Background automations: Daily Standup Briefing (7am), Vault Pipeline (7:10am), Dreaming Engine (6am), Weekly Synthesis (Sunday).' },
+  { id: 'skills',    x: 535, y: 50,  w: 170, h: 65,  label: 'Skills & Tools', icon: '🔧', color: '#fbbf24', bg: '#5d2e0f', desc: 'Calendar, GitHub, Research, Memory, Files, Terminal, Maps, Spotify, YouTube, and 20+ more tools — each a specialized capability.' },
+  { id: 'vault',     x: 535, y: 130, w: 170, h: 45,  label: 'Obsidian Vault', icon: '📓', color: '#e879f9', bg: '#522e5e', desc: 'Your knowledge base — 95+ notes in flat Karpathy-style structure. Daily notes, wiki entities, research, lesson plans.' },
+  { id: 'kb',        x: 535, y: 185, w: 170, h: 45,  label: 'Knowledge Base', icon: '💾', color: '#f472b6', bg: '#5e1e3e', desc: 'Persistent memory across sessions. Stores your profile, environment facts, preferences, and project conventions.' },
+  { id: 'dashboard', x: 535, y: 240, w: 170, h: 45,  label: 'Dashboard',    icon: '📊', color: '#06b6d4', bg: '#164e63', desc: 'Visual OS — model usage, vault graph, calendar, badminton training, live messages, dreaming engine suggestions.' },
+  { id: 'vps',       x: 45,  y: 325, w: 660, h: 50,  label: 'VPS Server',   icon: '🖥️', color: '#cbd5e1', bg: '#1e293b', desc: 'Your server at 43.156.249.23. Runs Hermes, the dashboard (port 3001), cron jobs, and git sync for the Obsidian vault.' },
 ]
 
 const SKILL_LABELS = ['Calendar', 'GitHub', 'Research', 'Memory', 'Files']
@@ -100,56 +100,77 @@ export default function HermesFlow() {
         </div>
       </div>
 
-      <svg viewBox="0 0 1040 420" preserveAspectRatio="xMidYMid meet"
-        style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 520 }}>
-        <defs>
+      <div style={{ position: 'relative', width: '100%', paddingBottom: '50%', background: 'radial-gradient(ellipse at center, #0f172a 0%, #030712 100%)' }}>
+        <svg viewBox="0 0 1040 420" preserveAspectRatio="xMidYMid meet"
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
+          <defs>
           <filter id="hf-shadow">
-            <feDropShadow dx="0" dy="3" stdDeviation="6" floodColor="#000" floodOpacity="0.6" />
+            <feDropShadow dx="0" dy="4" stdDeviation="8" floodColor="#000" floodOpacity="0.7" />
+          </filter>
+          <filter id="hf-glow">
+            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
           </filter>
           <marker id="hf-arrow" markerWidth="6" markerHeight="5" refX="6" refY="2.5" orient="auto">
-            <polygon points="0 0, 6 2.5, 0 5" fill="#8888cc" />
+            <polygon points="0 0, 6 2.5, 0 5" fill="#7c3aed" />
           </marker>
           <marker id="hf-arrow-active" markerWidth="7" markerHeight="5.5" refX="7" refY="2.75" orient="auto">
-            <polygon points="0 0, 7 2.75, 0 5.5" fill="#c4b5fd" />
+            <polygon points="0 0, 7 2.75, 0 5.5" fill="#c084fc" />
           </marker>
         </defs>
 
-        <rect x="0" y="0" width="1040" height="420" fill="#07070b" rx="0" />
+        <rect x="0" y="0" width="1040" height="420" fill="#030712" rx="0" />
 
-        {/* Zone boxes */}
+        {/* Zone boxes with enhanced styling */}
         {[
-          { x: 20, y: 15, w: 200, h: 180, nodes: ['you', 'telegram'] },
-          { x: 250, y: 15, w: 240, h: 270, nodes: ['hermes', 'cron'] },
-          { x: 520, y: 15, w: 240, h: 320, nodes: ['skills', 'vault', 'kb', 'dashboard'] },
-          { x: 20, y: 335, w: 740, h: 80, nodes: ['vps'] },
+          { x: 25, y: 30, w: 200, h: 145, nodes: ['you', 'telegram'], color: '#4ade80' },
+          { x: 255, y: 30, w: 210, h: 215, nodes: ['hermes', 'cron'], color: '#c084fc' },
+          { x: 515, y: 30, w: 210, h: 270, nodes: ['skills', 'vault', 'kb', 'dashboard'], color: '#fbbf24' },
+          { x: 25, y: 305, w: 700, h: 85, nodes: ['vps'], color: '#cbd5e1' },
         ].map(z => {
           const zoneHovered = (hovered || selected) && z.nodes.includes(hovered || selected!)
           return (
-            <rect key={z.x + '' + z.y}
-              x={z.x} y={z.y} width={z.w} height={z.h}
-              rx="10" fill="none"
-              stroke={zoneHovered ? '#ffffff18' : '#ffffff06'}
-              strokeWidth={zoneHovered ? 1.5 : 1}
-              style={{ transition: 'stroke 0.3s, strokeWidth 0.3s' }}
-            />
+            <g key={z.x + '' + z.y}>
+              {/* Zone background glow */}
+              <rect x={z.x} y={z.y} width={z.w} height={z.h}
+                rx="8" fill={z.color} opacity={zoneHovered ? 0.05 : 0.02}
+                style={{ transition: 'opacity 0.3s' }}
+              />
+              {/* Zone border */}
+              <rect x={z.x} y={z.y} width={z.w} height={z.h}
+                rx="8" fill="none"
+                stroke={zoneHovered ? z.color : '#ffffff08'}
+                strokeWidth={zoneHovered ? 2 : 1}
+                style={{ transition: 'stroke 0.3s, strokeWidth 0.3s' }}
+              />
+            </g>
           )
         })}
 
         {/* Zone labels */}
         {[
-          { x: 120, y: 35, text: 'USER', nodes: ['you', 'telegram'] },
-          { x: 370, y: 35, text: 'AGENT & AUTOMATIONS', nodes: ['hermes', 'cron'] },
-          { x: 640, y: 35, text: 'TOOLS & DATA', nodes: ['skills', 'vault', 'kb', 'dashboard'] },
-          { x: 390, y: 355, text: 'INFRASTRUCTURE', nodes: ['vps'] },
+          { x: 125, y: 48, text: 'USER', nodes: ['you', 'telegram'], color: '#4ade80' },
+          { x: 360, y: 48, text: 'AGENT & AUTOMATIONS', nodes: ['hermes', 'cron'], color: '#c084fc' },
+          { x: 620, y: 48, text: 'TOOLS & DATA', nodes: ['skills', 'vault', 'kb', 'dashboard'], color: '#fbbf24' },
+          { x: 375, y: 335, text: 'INFRASTRUCTURE', nodes: ['vps'], color: '#cbd5e1' },
         ].map(z => {
           const za = (hovered || selected) && z.nodes.includes(hovered || selected!)
           return (
-            <text key={z.text} x={z.x} y={z.y}
-              fill={za ? '#8888cc' : '#555578'}
-              fontSize={11} textAnchor="middle" fontWeight={600} letterSpacing="2.5"
-              style={{ transition: 'fill 0.3s' }}>
-              {z.text}
-            </text>
+            <g key={z.text}>
+              {/* Text background for readability */}
+              <rect x={z.x - 55} y={z.y - 11} width={110} height={16}
+                fill={z.color} opacity={0.08} rx={3}
+              />
+              <text x={z.x} y={z.y}
+                fill={za ? z.color : '#64748b'}
+                fontSize={11} textAnchor="middle" fontWeight={700} letterSpacing="2"
+                style={{ transition: 'fill 0.3s', textShadow: za ? `0 0 12px ${z.color}60` : 'none' }}>
+                {z.text}
+              </text>
+            </g>
           )
         })}
 
@@ -160,17 +181,29 @@ export default function HermesFlow() {
           const lp = arrowLabelPos(a.from, a.to, (a as any).labelY ?? 0)
           return (
             <g key={`${a.from}-${a.to}`}>
+              {/* Arrow glow on active */}
+              {hl && (
+                <path d={path} fill="none"
+                  stroke="#c084fc" strokeWidth={5.5}
+                  strokeOpacity={0.15}
+                  style={{ transition: 'all 0.3s' }}
+                />
+              )}
               <path d={path} fill="none"
-                stroke={hl ? '#c4b5fd' : '#6666aa'}
-                strokeWidth={hl ? 2.5 : 1.3}
-                strokeOpacity={hl ? 1 : 0.5}
+                stroke={hl ? '#c084fc' : '#7c3aed'}
+                strokeWidth={hl ? 2.2 : 1.2}
+                strokeOpacity={hl ? 1 : 0.4}
                 markerEnd={hl ? 'url(#hf-arrow-active)' : 'url(#hf-arrow)'}
                 style={{ transition: 'all 0.3s' }}
               />
+              {/* Label background */}
+              <rect x={lp.x - 28} y={lp.y - 10} width={56} height={14}
+                fill="#030712" opacity={0.8} rx={3}
+              />
               <text x={lp.x} y={lp.y}
-                fill={hl ? '#ddd6fe' : '#9999bb'}
-                fontSize={8.5} textAnchor="middle" fontWeight={hl ? 700 : 500}
-                style={{ transition: 'all 0.3s' }}>
+                fill={hl ? '#e0c7fc' : '#b4a3d1'}
+                fontSize={9} textAnchor="middle" fontWeight={hl ? 700 : 600}
+                style={{ transition: 'all 0.3s', pointerEvents: 'none' }}>
                 {a.label}
               </text>
             </g>
@@ -181,28 +214,38 @@ export default function HermesFlow() {
         {SKILL_LABELS.map((s, i) => {
           const sh = hovered === 'skills' || selected === 'skills'
           return (
-            <text key={s} x={565} y={56 + i * 14}
-              fill={sh ? '#e2e8f0' : '#94a3b8'}
-              fontSize={10} fontWeight={sh ? 700 : 600}
-              style={{ transition: 'all 0.3s' }}>
-              {sh ? '▶' : '▸'} {s}
-            </text>
+            <g key={s}>
+              <rect x={545} y={58 + i * 11} width={75} height={10}
+                fill={sh ? '#fbbf24' : '#1e1b4b'} opacity={sh ? 0.1 : 0.05} rx={2}
+              />
+              <text x={548} y={65 + i * 11}
+                fill={sh ? '#fcd34d' : '#d1d5db'}
+                fontSize={9} fontWeight={sh ? 700 : 600}
+                style={{ transition: 'all 0.3s', pointerEvents: 'none' }}>
+                {sh ? '▶' : '▸'} {s}
+              </text>
+            </g>
           )
         })}
-        <text x={700} y={92} fill="#94a3b8" fontSize={9} fontStyle="italic">+ 20 more tools</text>
+        <text x={650} y={88} fill="#6b7280" fontSize={8} fontStyle="italic">+20 more</text>
 
         {/* Sub-label highlights */}
         {[
-          { id: 'vault', x: 565, y: 165, text: '📕 95+ notes · Karpathy-style', color: '#c084fc' },
-          { id: 'kb', x: 565, y: 235, text: '📎 Session memory · profile', color: '#f472b6' },
-          { id: 'dashboard', x: 565, y: 305, text: '📈 Live widgets · clickable', color: '#2dd4bf' },
-          { id: 'cron', x: 290, y: 255, text: '⏰ 07:00 + 07:10 AM daily', color: '#67e8f9' },
+          { id: 'vault', x: 545, y: 158, text: '95+ notes', color: '#e879f9' },
+          { id: 'kb', x: 545, y: 208, text: 'Session memory', color: '#f472b6' },
+          { id: 'dashboard', x: 545, y: 260, text: 'Live widgets', color: '#06b6d4' },
+          { id: 'cron', x: 285, y: 220, text: '07:00 + 07:10 AM', color: '#22d3ee' },
         ].map(s => (
-          <text key={s.id} x={s.x} y={s.y}
-            fill={(hovered || selected) === s.id ? s.color : '#94a3b8'}
-            fontSize={9} style={{ transition: 'fill 0.3s' }}>
-            {s.text}
-          </text>
+          <g key={s.id}>
+            <rect x={s.x - 2} y={s.y - 11} width={130} height={14}
+              fill={s.color} opacity={(hovered || selected) === s.id ? 0.12 : 0.04} rx={2}
+            />
+            <text x={s.x} y={s.y}
+              fill={(hovered || selected) === s.id ? s.color : '#6b7280'}
+              fontSize={8} fontWeight={500} style={{ transition: 'fill 0.3s', pointerEvents: 'none' }}>
+              {s.text}
+            </text>
+          </g>
         ))}
 
         {/* Nodes */}
@@ -219,32 +262,40 @@ export default function HermesFlow() {
               onMouseLeave={() => { setHovered(null); setTooltipNode(null) }}
               onClick={() => setSelected(isSelected ? null : n.id)}
               style={{ cursor: 'pointer', transition: 'opacity 0.3s' }}
-              opacity={dimmed ? 0.25 : 1}
+              opacity={dimmed ? 0.2 : 1}
             >
               {/* Outer glow ring on active */}
               {active && (
-                <rect x={n.x - 8} y={n.y - 8} width={n.w + 16} height={n.h + 16}
-                  rx={14} ry={14} fill="none" stroke={n.color} strokeWidth={2}
-                  strokeOpacity={0.2} style={{ transition: 'all 0.3s' }} />
+                <rect x={n.x - 10} y={n.y - 10} width={n.w + 20} height={n.h + 20}
+                  rx={14} ry={14} fill="none" stroke={n.color} strokeWidth={3}
+                  strokeOpacity={0.15} style={{ transition: 'all 0.3s' }} />
               )}
 
+              {/* Main node box */}
               <rect x={n.x} y={n.y} width={n.w} height={n.h} rx={10} ry={10}
                 fill={n.bg}
-                stroke={isSelected ? '#fff' : (isHovered ? n.color : n.color + '50')}
-                strokeWidth={isSelected ? 2.5 : (isHovered ? 2 : 1)}
-                filter="url(#hf-shadow)"
+                stroke={isSelected ? n.color : (isHovered ? n.color : n.color + '40')}
+                strokeWidth={isSelected ? 2.2 : (isHovered ? 1.8 : 1.2)}
+                filter={active ? "url(#hf-shadow)" : undefined}
                 style={{ transition: 'stroke 0.3s, strokeWidth 0.3s' }}
               />
 
-              <text x={n.x + 20} y={n.y + n.h / 2 + 6}
-                fontSize={20} textAnchor="middle" dominantBaseline="middle">
+              {/* Text background for better contrast */}
+              <rect x={n.x + 5} y={n.y + 8} width={n.w - 10} height={n.h - 16} rx={6}
+                fill={n.color} opacity={0.1}
+                pointerEvents="none"
+              />
+
+              <text x={n.x + 20} y={n.y + n.h / 2 + 5}
+                fontSize={18} textAnchor="middle" dominantBaseline="middle"
+                pointerEvents="none">
                 {n.icon}
               </text>
 
-              <text x={n.x + 38} y={n.y + n.h / 2 + 1}
-                fill={active ? '#fff' : '#e2e8f0'}
-                fontSize={11} fontWeight={active ? 700 : 600}
-                style={{ transition: 'fill 0.3s' }}>
+              <text x={n.x + 32} y={n.y + n.h / 2}
+                fill={active ? n.color : '#fff'}
+                fontSize={10} fontWeight={active ? 700 : 700}
+                style={{ transition: 'fill 0.3s', pointerEvents: 'none' }}>
                 {isHovered ? `→ ${n.label}` : n.label}
               </text>
             </g>
@@ -252,64 +303,67 @@ export default function HermesFlow() {
         })}
 
         {/* VPS IP */}
-        <text x={390} y={395}
-          fill={(hovered || selected) === 'vps' ? '#94a3b8' : '#64748b'}
-          fontSize={8} textAnchor="middle" style={{ transition: 'fill 0.3s' }}>
+        <text x={375} y={368}
+          fill={(hovered || selected) === 'vps' ? '#cbd5e1' : '#475569'}
+          fontSize={7.5} textAnchor="middle" fontWeight={500} style={{ transition: 'fill 0.3s' }}>
           43.156.249.23
         </text>
       </svg>
+      </div>
 
       {/* ─── Hover / Selected Info Bar ─── */}
       {hoverInfo && (
         <div style={{
-          padding: '14px 24px',
-          borderTop: '1px solid rgba(255,255,255,0.06)',
-          background: `linear-gradient(135deg, ${hoverInfo.bg} 0%, rgba(15,10,25,0.95) 100%)`,
+          padding: '16px 24px',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          background: `linear-gradient(135deg, ${hoverInfo.bg}40 0%, rgba(15,10,25,0.6) 100%)`,
           display: 'flex',
           alignItems: 'center',
-          gap: 14,
-          animation: 'hfFadeIn 0.15s ease-out',
+          gap: 16,
+          animation: 'hfFadeIn 0.2s ease-out',
+          backdropFilter: 'blur(10px)',
         }}>
-          <span style={{ fontSize: 28, flexShrink: 0 }}>{hoverInfo.icon}</span>
+          <span style={{ fontSize: 32, flexShrink: 0, filter: 'drop-shadow(0 0 8px rgba(0,0,0,0.3))' }}>{hoverInfo.icon}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
               <span style={{ fontSize: 15, fontWeight: 700, color: hoverInfo.color }}>
                 {hoverInfo.label}
               </span>
               {/* Show connections count badge */}
               <span style={{
-                fontSize: 9, padding: '1px 7px', borderRadius: 10,
-                background: 'rgba(255,255,255,0.06)', color: '#8888bb',
-                border: '1px solid rgba(255,255,255,0.06)',
+                fontSize: 9, padding: '3px 8px', borderRadius: 12,
+                background: hoverInfo.color + '20', color: hoverInfo.color,
+                border: `1px solid ${hoverInfo.color}40`,
+                fontWeight: 600,
               }}>
                 {ARROWS.filter(a => a.from === hoverInfo.id || a.to === hoverInfo.id).length} connections
               </span>
               {selected === hoverInfo.id && (
-                <span style={{ fontSize: 9, color: '#8888bb' }}>· pinned · click again to close</span>
+                <span style={{ fontSize: 9, color: '#8b5cf6', fontWeight: 500 }}>· pinned</span>
               )}
             </div>
-            <div style={{ fontSize: 13, color: '#cccce0', lineHeight: 1.5 }}>
+            <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.6 }}>
               {hoverInfo.desc}
             </div>
             {/* Connection chips (only when pinned / selected) */}
             {selected === hoverInfo.id && (
-              <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {ARROWS.filter(a => a.from === hoverInfo.id).map(a => (
                   <span key={a.to} style={{
-                    fontSize: 9, padding: '2px 8px', borderRadius: 4,
-                    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
-                    color: '#aaaacc'
+                    fontSize: 9, padding: '3px 8px', borderRadius: 6,
+                    background: 'rgba(168, 85, 247, 0.08)', border: '1px solid rgba(168, 85, 247, 0.2)',
+                    color: '#d8b4fe', fontWeight: 500
                   }}>
-                    → {NODES.find(n => n.id === a.to)?.label || a.to}: {a.label}
+                    → {NODES.find(n => n.id === a.to)?.label || a.to}
                   </span>
                 ))}
                 {ARROWS.filter(a => a.to === hoverInfo.id).map(a => (
                   <span key={a.from} style={{
-                    fontSize: 9, padding: '2px 8px', borderRadius: 4,
-                    background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
-                    color: '#aaaacc'
+                    fontSize: 9, padding: '3px 8px', borderRadius: 6,
+                    background: 'rgba(168, 85, 247, 0.08)', border: '1px solid rgba(168, 85, 247, 0.2)',
+                    color: '#d8b4fe', fontWeight: 500
                   }}>
-                    ← {NODES.find(n => n.id === a.from)?.label || a.from}: {a.label}
+                    ← {NODES.find(n => n.id === a.from)?.label || a.from}
                   </span>
                 ))}
               </div>
@@ -319,10 +373,14 @@ export default function HermesFlow() {
           {selected === hoverInfo.id && (
             <button onClick={() => setSelected(null)}
               style={{
-                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
-                color: '#ccc', cursor: 'pointer', fontSize: 18,
-                padding: '2px 10px', borderRadius: 6, lineHeight: 1.2, flexShrink: 0
-              }}>
+                background: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.2)',
+                color: '#c084fc', cursor: 'pointer', fontSize: 18,
+                padding: '4px 10px', borderRadius: 6, lineHeight: 1.2, flexShrink: 0,
+                fontWeight: 600, transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(168, 85, 247, 0.15)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(168, 85, 247, 0.1)'}
+            >
               ✕
             </button>
           )}
@@ -331,17 +389,24 @@ export default function HermesFlow() {
 
       {/* Footer */}
       <div style={{
-        padding: '10px 24px', borderTop: '1px solid rgba(255,255,255,0.04)',
-        fontSize: 12, color: '#8888bb', display: 'flex', justifyContent: 'space-between'
+        padding: '12px 24px', borderTop: '1px solid rgba(255,255,255,0.05)',
+        fontSize: 12, color: '#6b7280', display: 'flex', justifyContent: 'space-between',
+        background: 'rgba(0,0,0,0.2)'
       }}>
         <span>👆 Hover for info · Click to pin details</span>
-        <span>{NODES.length} components · {ARROWS.length} connections</span>
+        <span style={{ color: '#4b5563' }}>{NODES.length} components · {ARROWS.length} connections</span>
       </div>
 
       <style>{`
         @keyframes hfFadeIn {
-          from { opacity: 0; }
-          to   { opacity: 1; }
+          from { 
+            opacity: 0;
+            transform: translateY(-4px);
+          }
+          to { 
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
       `}</style>
     </div>
