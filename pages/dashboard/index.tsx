@@ -24,6 +24,9 @@ type VaultStats = {
 }
 
 type DreamingRec = {
+  category?: string
+  title?: string
+  detail?: string
   type: string
   message: string
   priority: 'high' | 'medium' | 'low'
@@ -261,6 +264,7 @@ export default function Dashboard() {
               {dailySummary.yesterday.items && dailySummary.yesterday.items.length > 0 ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                   {dailySummary.yesterday.items.map((item, i) => {
+                    if (!item) return null
                     const isChecked = item.startsWith('[x]') || item.startsWith('[X]')
                     const text = item.replace(/^\[.\]\s*/, '').trim()
                     return (
@@ -611,15 +615,18 @@ export default function Dashboard() {
                 📝 Recently Modified
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {vault.recentlyModified.slice(0, 5).map((f, i) => (
-                  <span key={i} style={{
-                    fontSize: 10, padding: '3px 8px',
-                    background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.1)',
-                    borderRadius: 4, color: 'var(--text-secondary)'
-                  }}>
-                    {f.replace('.md', '')}
-                  </span>
-                ))}
+                {vault.recentlyModified.slice(0, 5).map((f, i) => {
+                  if (!f) return null
+                  return (
+                    <span key={i} style={{
+                      fontSize: 10, padding: '3px 8px',
+                      background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.1)',
+                      borderRadius: 4, color: 'var(--text-secondary)'
+                    }}>
+                      {f.replace('.md', '')}
+                    </span>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -763,13 +770,13 @@ export default function Dashboard() {
                 return (
                   <div key={i} className={`dream-item ${cls}`}>
                     <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>
-                      {iconMap[rec.type] || '💡'}
+                      {iconMap[rec.category] || '💡'}
                     </span>
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 2, textTransform: 'capitalize' }}>
-                        {rec.type.replace(/_/g, ' ')}
+                        {rec.category ? rec.category.replace(/_/g, ' ') : 'Insight'}
                       </div>
-                      <div style={{ fontSize: 12, color: '#bbb', lineHeight: 1.5 }}>{rec.message}</div>
+                      <div style={{ fontSize: 12, color: '#bbb', lineHeight: 1.5 }}>{rec.title} - {rec.detail || rec.message}</div>
                     </div>
                   </div>
                 )
