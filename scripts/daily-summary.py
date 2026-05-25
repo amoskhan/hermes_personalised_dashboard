@@ -6,7 +6,7 @@ Daily Summary Generator — Reads Obsidian vault for:
 3. Today's varied suggestions (different every day)
 """
 
-import json, os, re, random
+import json, os, re, random, subprocess, sys
 from datetime import datetime, timedelta
 
 VAULT_DIR = os.path.expanduser("~/ObsidianVault")
@@ -364,7 +364,16 @@ def main():
 
     # Fresh daily suggestions (filtered to exclude completed tasks)
     suggestions = generate_suggestions(today, weekly, yesterday_items, completed_tasks)
-    
+
+    # NEA weather via data.gov.sg
+    weather = {}
+    try:
+        weather_script = os.path.join(os.path.dirname(__file__), "nea-weather.py")
+        raw = subprocess.check_output([sys.executable, weather_script], timeout=15)
+        weather = json.loads(raw)
+    except Exception:
+        weather = {"source": "NEA/data.gov.sg", "summary": "Weather unavailable"}
+
     # Today's theme
     today_theme = extract_day_theme(today_note) if today_note else ""
     day_name = weekday_name(today)
@@ -392,7 +401,8 @@ def main():
         },
         "todayPlan": today_plan,
         "weekly": weekly,
-        "suggestions": suggestions
+        "suggestions": suggestions,
+        "weather": weather
     }
     print(json.dumps(result))
 
